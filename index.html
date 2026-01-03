@@ -356,7 +356,7 @@
             const res = await fetch(url);
             if (!res.ok) return [];
             const data = await res.json();
-            return data[1] || [];
+            return (data[1] || []);
         } catch (e) {
             return [];
         }
@@ -806,40 +806,40 @@
                             '<span class="stat-label">Clicks</span>' +
                             '<span class="stat-value" id="clicks-value">' +
                             this.clicks +
-                            "</span>" +
-                        "</div>" +
+                            '</span>' +
+                        '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Time</span>' +
-                            '<span class="stat-value" id="timer">0:00</span>" +
-                        "</div>" +
+                            '<span class="stat-value" id="timer">0:00</span>' +
+                        '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Difficulty</span>' +
                             '<span class="stat-value" id="difficulty-value">' +
                             difficultyText +
-                            "</span>" +
-                        "</div>" +
+                            '</span>' +
+                        '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Links</span>' +
                             '<span class="stat-value" id="links-value">' +
                             this.currentLinkCount +
-                            "</span>" +
-                        "</div>" +
-                    "</div>" +
+                            '</span>' +
+                        '</div>' +
+                    '</div>' +
                     '<button style="width:auto;padding:8px 15px;margin:0;" onclick="game.showMenu()">Menu</button>' +
-                "</div>" +
+                '</div>' +
                 '<div class="target-bar">' +
                     '<div>Current:<span class="target-title">' +
                     this.currentPage +
-                    "</span></div>" +
+                    '</span></div>' +
                     '<div>Target:<span class="target-title">' +
                     this.targetPage +
-                    "</span></div>" +
-                "</div>" +
+                    '</span></div>' +
+                '</div>' +
                 '<div class="content">' +
                     '<div class="wiki-content">' +
                     htmlContent +
-                    "</div>" +
-                "</div>";
+                    '</div>' +
+                '</div>';
 
             this.attachLinkHandlers();
             this.updateHeaderStats();
@@ -934,7 +934,7 @@
 
         showLoading(message) {
             document.getElementById("app").innerHTML =
-                '<div class="loading">' + (message || "Loading...") + "</div>";
+                '<div class="loading">' + (message || "Loading...") + '</div>';
         }
 
         showError(message) {
@@ -942,9 +942,9 @@
                 '<div class="menu">' +
                     '<div class="error">' +
                     message +
-                    "</div>" +
+                    '</div>' +
                     '<button class="primary-btn" onclick="game.showMenu()">Back to settings</button>' +
-                "</div>";
+                '</div>';
         }
     }
 
