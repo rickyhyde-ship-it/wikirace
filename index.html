@@ -71,13 +71,9 @@
 
         .target-title { font-weight: bold; font-size: 15px; margin-left: 4px; }
 
-        .diff-chip {
-            font-weight: 600;
-        }
-
         .content {
             padding: 20px;
-            max-height: calc(100vh - 270px);
+            max-height: calc(100vh - 250px);
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
@@ -109,20 +105,6 @@
             align-items: center;
             gap: 8px;
             position: relative;
-        }
-
-        .settings-input {
-            flex: 1;
-            background: #fdfde0;
-            border: 2px solid #1f3270;
-            border-radius: 6px;
-            padding: 10px 12px;
-            font-size: 15px;
-            color: #1f3270;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .settings-input-field {
@@ -315,7 +297,7 @@
             .stat-value { font-size: 16px; }
             .menu h1 { font-size: 24px; }
             .content {
-                max-height: calc(100vh - 290px);
+                max-height: calc(100vh - 270px);
                 padding: 15px;
             }
             .wiki-content table { font-size: 14px; }
@@ -329,6 +311,7 @@
 
 <script>
     const API_BASE = "https://en.wikipedia.org/w/api.php";
+    const TOP_BASE = "https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/mobile-web";
 
     function debounce(fn, delay) {
         let t;
@@ -359,19 +342,52 @@
         return t.replace(/_/g, " ").trim().toLowerCase();
     }
 
-    // New banding: 0–3 → Very Easy, 4–10 → Easy, 11–25 → Medium, 26–50 → Hard,
-    // 51–75 → Hardcore, 76–90 → Ultimate, 91–100 → Crack Head Mode
-    function difficultyLabelFromScore(score) {
-        if (score < 0) score = 0;
-        if (score > 100) score = 100;
+    // Pick a random month between 2016-01 and 2025-12 inclusive
+    function randomYearMonth() {
+        const startYear = 2016;
+        const startMonth = 1;
+        const endYear = 2025;
+        const endMonth = 12;
 
-        if (score <= 3)   return "Very Easy";
-        if (score <= 10)  return "Easy";
-        if (score <= 25)  return "Medium";
-        if (score <= 50)  return "Hard";
-        if (score <= 75)  return "Hardcore";
-        if (score <= 90)  return "Ultimate";
-        return "Crack Head Mode";
+        const startIndex = (startYear * 12) + (startMonth - 1);
+        const endIndex = (endYear * 12) + (endMonth - 1);
+        const idx = Math.floor(Math.random() * (endIndex - startIndex + 1)) + startIndex;
+
+        const year = Math.floor(idx / 12);
+        const month = (idx % 12) + 1;
+        const monthStr = month < 10 ? "0" + month : "" + month;
+        return { year: "" + year, month: monthStr };
+    }
+
+    // Get a random "easy" article from the top mobile-web pageviews API
+    async function getRandomTopArticle() {
+        const ym = randomYearMonth();
+        const url = TOP_BASE + "/" + ym.year + "/" + ym.month + "/all-days";
+        try {
+            const res = await fetch(url);
+            if (!res.ok) {
+                // Fallback: just use random page if API fails
+                return null;
+            }
+            const data = await res.json();
+            if (!data.items || !data.items.length) return null;
+            const articles = data.items[0].articles || [];
+
+            // Filter out obvious junk entries
+            const filtered = articles.filter(a => {
+                if (!a.article) return false;
+                const name = a.article;
+                if (name === "Main_Page") return false;
+                if (name.indexOf("Special:") === 0) return false;
+                return true;
+            });
+            if (!filtered.length) return null;
+
+            const idx = Math.floor(Math.random() * filtered.length);
+            return filtered[idx].article.replace(/_/g, " ");
+        } catch (e) {
+            return null;
+        }
     }
 
     class WikiRaceGame {
@@ -387,17 +403,12 @@
             this.currentLinkCount = 0;
             this.currentWordCount = 0;
 
-            this.startDifficultyScore = null;
-            this.startDifficultyName = "";
-            this.targetDifficultyScore = null;
-            this.targetDifficultyName = "";
-
-            this.selectedDifficultyBand = "auto";
-            this.pendingNavigation = false;
-
-            this.freeClickNext = false;
+            this.difficultyMode = "crack"; // "crack" or "easy"
             this.backLimit = 0;
             this.backUsesLeft = 0;
+            this.pendingNavigation = false;
+            this.freeClickNext = false;
+
             this.history = [];
             this.historyStack = [];
 
@@ -432,23 +443,10 @@
                     '<h1>Settings</h1>' +
 
                     '<div class="settings-group">' +
-                        '<div class="setting-label">Language</div>' +
-                        '<div class="settings-row">' +
-                            '<div class="settings-input">English</div>' +
-                        '</div>' +
-                    '</div>' +
-
-                    '<div class="settings-group">' +
-                        '<div class="setting-label">Difficulty (link + length)</div>' +
+                        '<div class="setting-label">Difficulty mode</div>' +
                         '<select id="difficulty-select" class="difficulty-select">' +
-                            '<option value="auto">Any</option>' +
-                            '<option value="veryeasy">Very Easy</option>' +
-                            '<option value="easy">Easy</option>' +
-                            '<option value="medium">Medium</option>' +
-                            '<option value="hard">Hard</option>' +
-                            '<option value="hardcore">Hardcore</option>' +
-                            '<option value="ultimate">Ultimate</option>' +
-                            '<option value="crack">Crack Head Mode</option>' +
+                            '<option value="crack">Crack Head Mode (fully random)</option>' +
+                            '<option value="easy">Easy Mode (popular pages)</option>' +
                         '</select>' +
                     '</div>' +
 
@@ -501,9 +499,7 @@
             const self = this;
 
             select.addEventListener("change", function () {
-                self.selectedDifficultyBand = this.value;
-                if (!startInput.value) self.startPage = null;
-                if (!targetInput.value) self.targetPage = null;
+                self.difficultyMode = this.value;
             });
 
             backSelect.addEventListener("change", function () {
@@ -512,14 +508,16 @@
             this.backLimit = 0;
 
             randomStartBtn.addEventListener("click", async function () {
-                const title = await self.getRandomPage();
+                const title = await self.getRandomPageForMode();
+                if (!title) return;
                 self.startPage = title;
                 startInput.value = title;
                 startSuggestions.style.display = "none";
             });
 
             randomTargetBtn.addEventListener("click", async function () {
-                const title = await self.getRandomPage();
+                const title = await self.getRandomPageForMode();
+                if (!title) return;
                 self.targetPage = title;
                 targetInput.value = title;
                 targetSuggestions.style.display = "none";
@@ -556,7 +554,7 @@
                 }, 200);
             });
 
-            this.selectedDifficultyBand = "auto";
+            this.difficultyMode = "crack";
         }
 
         renderSuggestions(titles, container, inputEl, which) {
@@ -580,16 +578,21 @@
             container.style.display = "block";
         }
 
-        bandForScore(score) {
-            const label = difficultyLabelFromScore(score);
-            if (label === "Very Easy")       return "veryeasy";
-            if (label === "Easy")            return "easy";
-            if (label === "Medium")          return "medium";
-            if (label === "Hard")            return "hard";
-            if (label === "Hardcore")        return "hardcore";
-            if (label === "Ultimate")        return "ultimate";
-            if (label === "Crack Head Mode") return "crack";
-            return "unknown";
+        async getRandomPage() {
+            const response = await fetch(
+                API_BASE + "?action=query&format=json&list=random&rnnamespace=0&rnlimit=1&origin=*"
+            );
+            const data = await response.json();
+            return data.query.random[0].title;
+        }
+
+        async getRandomPageForMode() {
+            if (this.difficultyMode === "easy") {
+                const top = await getRandomTopArticle();[file:108]
+                if (top) return top;
+                // fall back if top API fails
+            }
+            return await this.getRandomPage();
         }
 
         async prepareGameFromSettings(isVSMode) {
@@ -609,28 +612,14 @@
             this.showLoading("Setting up...");
 
             if (!this.startPage) {
-                if (this.selectedDifficultyBand === "auto") {
-                    this.startPage = await this.getRandomPage();
-                } else {
-                    const candidate = await this.findPageForBand(this.selectedDifficultyBand);
-                    this.startPage = candidate || await this.getRandomPage();
-                }
+                this.startPage = await this.getRandomPageForMode();
                 startInput.value = this.startPage;
             }
 
             if (!this.targetPage) {
-                this.targetPage = await this.getRandomPage();
+                this.targetPage = await this.getRandomPageForMode();
                 targetInput.value = this.targetPage;
             }
-
-            // Precompute difficulty for start and target
-            const startScore = await this.estimateDifficultyForTitle(this.startPage);
-            this.startDifficultyScore = startScore;
-            this.startDifficultyName = difficultyLabelFromScore(startScore);
-
-            const targetScore = await this.estimateDifficultyForTitle(this.targetPage);
-            this.targetDifficultyScore = targetScore;
-            this.targetDifficultyName = difficultyLabelFromScore(targetScore);
 
             this.backUsesLeft = this.backLimit;
             this.history = [];
@@ -652,13 +641,12 @@
 
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-
                 this.freeClickNext = false;
                 this.history = [this.startPage];
                 this.historyStack = [];
 
                 this.startTimer();
-                await this.loadPage(this.startPage, true);
+                await this.loadPage(this.startPage);
             } catch (e) {
                 this.showError("Failed to start game.");
             }
@@ -676,12 +664,11 @@
                 document.getElementById("app").innerHTML =
                     '<div class="menu">' +
                         '<h1>VS Challenge</h1>' +
+                        '<p><strong>Mode:</strong> ' +
+                        (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") +
+                        '</p>' +
                         '<p><strong>Start:</strong> ' + start + '</p>' +
                         '<p><strong>Target:</strong> ' + target + '</p>' +
-                        '<p><strong>Start difficulty:</strong> ' +
-                            this.startDifficultyName + " (" + this.startDifficultyScore + ')</p>' +
-                        '<p><strong>Target difficulty:</strong> ' +
-                            this.targetDifficultyName + " (" + this.targetDifficultyScore + ')</p>' +
                         '<div class="share-input">' + shareUrl + '</div>' +
                         '<button class="primary-btn" style="margin-top:15px;" onclick="navigator.clipboard.writeText(\'' + shareUrl + '\').then(function(){ alert(\'Link copied!\'); })">Copy link</button>' +
                         '<button class="primary-btn" style="margin-top:8px;background:#555" onclick="game.playChallengeNow(\'' + start + '\', \'' + target + '\')">Play this challenge</button>' +
@@ -704,23 +691,13 @@
 
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-
                 this.freeClickNext = false;
                 this.backUsesLeft = this.backLimit;
                 this.history = [this.startPage];
                 this.historyStack = [];
 
-                // Precompute difficulty for start and target
-                const startScore = await this.estimateDifficultyForTitle(this.startPage);
-                this.startDifficultyScore = startScore;
-                this.startDifficultyName = difficultyLabelFromScore(startScore);
-
-                const targetScore = await this.estimateDifficultyForTitle(this.targetPage);
-                this.targetDifficultyScore = targetScore;
-                this.targetDifficultyName = difficultyLabelFromScore(targetScore);
-
                 this.startTimer();
-                await this.loadPage(this.startPage, true);
+                await this.loadPage(this.startPage);
             } catch (error) {
                 this.showError("Failed to load challenge.");
             }
@@ -730,59 +707,7 @@
             this.startChallengeMode(start, target);
         }
 
-        async getRandomPage() {
-            const response = await fetch(
-                API_BASE + "?action=query&format=json&list=random&rnnamespace=0&rnlimit=1&origin=*"
-            );
-            const data = await response.json();
-            return data.query.random[0].title;
-        }
-
-        // Quick estimate for a title: one parse, count links+words, compute score
-        async estimateDifficultyForTitle(title) {
-            try {
-                const response = await fetch(
-                    API_BASE +
-                        "?action=parse&format=json&page=" +
-                        encodeURIComponent(title) +
-                        "&prop=text&disableeditsection=1&disabletoc=1&origin=*"
-                );
-                const data = await response.json();
-                if (data.error) return 50;
-
-                const html = data.parse.text["*"] || "";
-                const tmp = document.createElement("div");
-                tmp.innerHTML = html;
-
-                const links = tmp.querySelectorAll("a");
-                let validLinks = 0;
-                for (let i = 0; i < links.length; i++) {
-                    const href = links[i].getAttribute("href");
-                    if (href && href.indexOf("/wiki/") === 0 && href.indexOf(":") === -1) {
-                        validLinks++;
-                    }
-                }
-
-                const text = tmp.textContent || "";
-                const words = text.trim().split(/\s+/).filter(Boolean).length;
-
-                return this.computeDifficultyScore(validLinks, words);
-            } catch (e) {
-                return 50;
-            }
-        }
-
-        async findPageForBand(band) {
-            for (let i = 0; i < 20; i++) {
-                const candidate = await this.getRandomPage();
-                const score = await this.estimateDifficultyForTitle(candidate);
-                const candidateBand = this.bandForScore(score);
-                if (candidateBand === band) return candidate;
-            }
-            return null;
-        }
-
-        async loadPage(title, isFirstPage) {
+        async loadPage(title) {
             this.pendingNavigation = true;
             this.showLoading("Loading " + title + "...");
             try {
@@ -799,7 +724,6 @@
                 }
 
                 const apiTitle = data.parse && data.parse.title ? data.parse.title : title;
-
                 this.currentPage = apiTitle;
 
                 const html = data.parse.text["*"] || "";
@@ -817,27 +741,12 @@
                             validLinks++;
                         }
                     }
-
                     const text = container.textContent || "";
                     words = text.trim().split(/\s+/).filter(Boolean).length;
                 }
 
                 this.currentLinkCount = validLinks;
                 this.currentWordCount = words;
-
-                if (normalizeTitle(apiTitle) === normalizeTitle(this.startPage)) {
-                    // Recompute start difficulty if needed
-                    if (this.startDifficultyScore == null) {
-                        this.startDifficultyScore = this.computeDifficultyScore(validLinks, words);
-                        this.startDifficultyName = difficultyLabelFromScore(this.startDifficultyScore);
-                    }
-                } else if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
-                    if (this.targetDifficultyScore == null) {
-                        this.targetDifficultyScore = this.computeDifficultyScore(validLinks, words);
-                        this.targetDifficultyName = difficultyLabelFromScore(this.targetDifficultyScore);
-                    }
-                }
-
                 this.updateHeaderStats();
 
                 if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
@@ -850,34 +759,14 @@
             }
         }
 
-        // Link+length difficulty: 0 (easiest) to 100 (hardest)
-        computeDifficultyScore(linkCount, wordCount) {
-            const Lcap = 300;
-            const Wcap = 5000;
-
-            const Ln = Math.min(linkCount, Lcap) / Lcap;   // 0–1, more links => easier
-            const Wn = Math.min(wordCount, Wcap) / Wcap;   // 0–1, longer => easier
-
-            const Dlinks = 1 - Ln;
-            const Dwords = 1 - Wn;
-
-            const score = 100 * (0.7 * Dlinks + 0.3 * Dwords);
-            return Math.round(score);
-        }
-
         updateHeaderStats() {
             const diffEl = document.getElementById("difficulty-value");
             const linksEl = document.getElementById("links-value");
             const backEl = document.getElementById("back-uses-value");
 
             if (diffEl) {
-                const startText = this.startDifficultyScore == null
-                    ? "Start: calculating"
-                    : "Start: " + this.startDifficultyName + " (" + this.startDifficultyScore + ")";
-                const targetText = this.targetDifficultyScore == null
-                    ? "Target: calculating"
-                    : "Target: " + this.targetDifficultyName + " (" + this.targetDifficultyScore + ")";
-                diffEl.textContent = startText + " | " + targetText;
+                diffEl.textContent =
+                    (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
             }
 
             if (linksEl) {
@@ -891,10 +780,7 @@
 
         render(htmlContent) {
             const diffText =
-                (this.startDifficultyScore == null || this.targetDifficultyScore == null)
-                    ? "Start: calculating | Target: calculating"
-                    : "Start: " + this.startDifficultyName + " (" + this.startDifficultyScore + ")" +
-                      " | Target: " + this.targetDifficultyName + " (" + this.targetDifficultyScore + ")";
+                (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
 
             document.getElementById("app").innerHTML =
                 '<div class="header">' +
@@ -909,9 +795,9 @@
                             '<span class="stat-label">Time</span>' +
                             '<span class="stat-value" id="timer">0:00</span>' +
                         '</div>' +
-                        '<div class="stat-item" style="min-width:220px;">' +
-                            '<span class="stat-label">Difficulty</span>' +
-                            '<span class="stat-value" id="difficulty-value" style="font-size:12px;line-height:1.3;">' +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Mode</span>' +
+                            '<span class="stat-value" id="difficulty-value" style="font-size:14px;">' +
                             diffText +
                             '</span>' +
                         '</div>' +
@@ -941,19 +827,9 @@
                     '</div>' +
                     '<div class="target-row">' +
                         '<div>Start:<span class="target-title">' + this.startPage + '</span></div>' +
-                        '<div class="diff-chip">' +
-                        (this.startDifficultyScore == null
-                            ? "Start diff: ?"
-                            : this.startDifficultyName + " (" + this.startDifficultyScore + ")") +
-                        '</div>' +
                     '</div>' +
                     '<div class="target-row">' +
                         '<div>Target:<span class="target-title">' + this.targetPage + '</span></div>' +
-                        '<div class="diff-chip">' +
-                        (this.targetDifficultyScore == null
-                            ? "Target diff: ?"
-                            : this.targetDifficultyName + " (" + this.targetDifficultyScore + ")") +
-                        '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="content">' +
@@ -1004,7 +880,7 @@
                             gameRef.history.push(title);
                             gameRef.historyStack.push(gameRef.currentPage);
 
-                            gameRef.loadPage(title, false);
+                            gameRef.loadPage(title);
                         });
                     } else {
                         link.style.pointerEvents = "none";
@@ -1037,7 +913,7 @@
                 gameRef.backUsesLeft--;
 
                 gameRef.updateHeaderStats();
-                gameRef.loadPage(prevTitle, false);
+                gameRef.loadPage(prevTitle);
                 updateState();
             });
         }
@@ -1089,16 +965,11 @@
                 '<div class="menu">' +
                     '<h1>Game complete</h1>' +
                     '<div class="victory">' +
+                        '<p><strong>Mode:</strong> ' +
+                        (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") +
+                        '</p>' +
                         '<p><strong>Total clicks:</strong> ' + totalClicks + '</p>' +
                         '<p><strong>Time:</strong> ' + finalTime + '</p>' +
-                        '<p><strong>Start difficulty:</strong> ' +
-                            (this.startDifficultyName || "?") + " (" +
-                            (this.startDifficultyScore != null ? this.startDifficultyScore : "?") +
-                            ')</p>' +
-                        '<p><strong>Target difficulty:</strong> ' +
-                            (this.targetDifficultyName || "?") + " (" +
-                            (this.targetDifficultyScore != null ? this.targetDifficultyScore : "?") +
-                            ')</p>' +
                     '</div>' +
                     '<div class="settings-group">' +
                         '<div class="setting-label">Journey</div>' +
