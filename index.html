@@ -366,7 +366,6 @@
         try {
             const res = await fetch(url);
             if (!res.ok) {
-                // Fallback: just use random page if API fails
                 return null;
             }
             const data = await res.json();
@@ -588,7 +587,7 @@
 
         async getRandomPageForMode() {
             if (this.difficultyMode === "easy") {
-                const top = await getRandomTopArticle();[file:108]
+                const top = await getRandomTopArticle();
                 if (top) return top;
                 // fall back if top API fails
             }
