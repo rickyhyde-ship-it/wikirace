@@ -54,16 +54,26 @@
 
         .target-bar {
             background: #dfe8ff;
-            padding: 12px 20px;
+            padding: 8px 20px 12px 20px;
             color: #1f3270;
-            font-size: 14px;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .target-row {
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .target-title { font-weight: bold; font-size: 16px; margin-left: 4px; }
+        .target-title { font-weight: bold; font-size: 15px; margin-left: 4px; }
+
+        .diff-chip {
+            font-weight: 600;
+        }
 
         .content {
             padding: 20px;
@@ -349,17 +359,18 @@
         return t.replace(/_/g, " ").trim().toLowerCase();
     }
 
-    // Map 0–100 difficulty score into 6 bands
+    // New banding: 0–3 → Very Easy, 4–10 → Easy, 11–25 → Medium, 26–50 → Hard,
+    // 51–75 → Hardcore, 76–90 → Ultimate, 91–100 → Crack Head Mode
     function difficultyLabelFromScore(score) {
         if (score < 0) score = 0;
         if (score > 100) score = 100;
 
-        // You can tune these thresholds; this is a starting point
-        if (score < 15) return "Very Easy";
-        if (score < 30) return "Easy";
-        if (score < 50) return "Medium";
-        if (score < 70) return "Hard";
-        if (score < 85) return "Hardcore";
+        if (score <= 3)   return "Very Easy";
+        if (score <= 10)  return "Easy";
+        if (score <= 25)  return "Medium";
+        if (score <= 50)  return "Hard";
+        if (score <= 75)  return "Hardcore";
+        if (score <= 90)  return "Ultimate";
         return "Crack Head Mode";
     }
 
@@ -372,10 +383,15 @@
             this.startTime = null;
             this.timerInterval = null;
             this.gameActive = false;
+
             this.currentLinkCount = 0;
             this.currentWordCount = 0;
-            this.difficultyScore = null;
-            this.difficultyName = "";
+
+            this.startDifficultyScore = null;
+            this.startDifficultyName = "";
+            this.targetDifficultyScore = null;
+            this.targetDifficultyName = "";
+
             this.selectedDifficultyBand = "auto";
             this.pendingNavigation = false;
 
@@ -431,6 +447,7 @@
                             '<option value="medium">Medium</option>' +
                             '<option value="hard">Hard</option>' +
                             '<option value="hardcore">Hardcore</option>' +
+                            '<option value="ultimate">Ultimate</option>' +
                             '<option value="crack">Crack Head Mode</option>' +
                         '</select>' +
                     '</div>' +
@@ -565,11 +582,12 @@
 
         bandForScore(score) {
             const label = difficultyLabelFromScore(score);
-            if (label === "Very Easy") return "veryeasy";
-            if (label === "Easy") return "easy";
-            if (label === "Medium") return "medium";
-            if (label === "Hard") return "hard";
-            if (label === "Hardcore") return "hardcore";
+            if (label === "Very Easy")       return "veryeasy";
+            if (label === "Easy")            return "easy";
+            if (label === "Medium")          return "medium";
+            if (label === "Hard")            return "hard";
+            if (label === "Hardcore")        return "hardcore";
+            if (label === "Ultimate")        return "ultimate";
             if (label === "Crack Head Mode") return "crack";
             return "unknown";
         }
@@ -605,6 +623,15 @@
                 targetInput.value = this.targetPage;
             }
 
+            // Precompute difficulty for start and target
+            const startScore = await this.estimateDifficultyForTitle(this.startPage);
+            this.startDifficultyScore = startScore;
+            this.startDifficultyName = difficultyLabelFromScore(startScore);
+
+            const targetScore = await this.estimateDifficultyForTitle(this.targetPage);
+            this.targetDifficultyScore = targetScore;
+            this.targetDifficultyName = difficultyLabelFromScore(targetScore);
+
             this.backUsesLeft = this.backLimit;
             this.history = [];
             this.historyStack = [];
@@ -622,10 +649,10 @@
                 this.clicks = 0;
                 this.startTime = Date.now();
                 this.gameActive = true;
+
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-                this.difficultyScore = null;
-                this.difficultyName = "";
+
                 this.freeClickNext = false;
                 this.history = [this.startPage];
                 this.historyStack = [];
@@ -651,6 +678,10 @@
                         '<h1>VS Challenge</h1>' +
                         '<p><strong>Start:</strong> ' + start + '</p>' +
                         '<p><strong>Target:</strong> ' + target + '</p>' +
+                        '<p><strong>Start difficulty:</strong> ' +
+                            this.startDifficultyName + " (" + this.startDifficultyScore + ')</p>' +
+                        '<p><strong>Target difficulty:</strong> ' +
+                            this.targetDifficultyName + " (" + this.targetDifficultyScore + ')</p>' +
                         '<div class="share-input">' + shareUrl + '</div>' +
                         '<button class="primary-btn" style="margin-top:15px;" onclick="navigator.clipboard.writeText(\'' + shareUrl + '\').then(function(){ alert(\'Link copied!\'); })">Copy link</button>' +
                         '<button class="primary-btn" style="margin-top:8px;background:#555" onclick="game.playChallengeNow(\'' + start + '\', \'' + target + '\')">Play this challenge</button>' +
@@ -670,14 +701,23 @@
                 this.clicks = 0;
                 this.startTime = Date.now();
                 this.gameActive = true;
+
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-                this.difficultyScore = null;
-                this.difficultyName = "";
+
                 this.freeClickNext = false;
                 this.backUsesLeft = this.backLimit;
                 this.history = [this.startPage];
                 this.historyStack = [];
+
+                // Precompute difficulty for start and target
+                const startScore = await this.estimateDifficultyForTitle(this.startPage);
+                this.startDifficultyScore = startScore;
+                this.startDifficultyName = difficultyLabelFromScore(startScore);
+
+                const targetScore = await this.estimateDifficultyForTitle(this.targetPage);
+                this.targetDifficultyScore = targetScore;
+                this.targetDifficultyName = difficultyLabelFromScore(targetScore);
 
                 this.startTimer();
                 await this.loadPage(this.startPage, true);
@@ -698,19 +738,8 @@
             return data.query.random[0].title;
         }
 
-        async findPageForBand(band) {
-            for (let i = 0; i < 20; i++) {
-                const candidate = await this.getRandomPage();
-                // estimate difficulty for candidate quickly:
-                const score = await this.estimateDifficultyForTitle(candidate);
-                const candidateBand = this.bandForScore(score);
-                if (candidateBand === band) return candidate;
-            }
-            return null;
-        }
-
+        // Quick estimate for a title: one parse, count links+words, compute score
         async estimateDifficultyForTitle(title) {
-            // quick & dirty: load parse with only text, compute link+length once
             try {
                 const response = await fetch(
                     API_BASE +
@@ -719,11 +748,12 @@
                         "&prop=text&disableeditsection=1&disabletoc=1&origin=*"
                 );
                 const data = await response.json();
-                if (data.error) return 50; // default medium
+                if (data.error) return 50;
 
                 const html = data.parse.text["*"] || "";
                 const tmp = document.createElement("div");
                 tmp.innerHTML = html;
+
                 const links = tmp.querySelectorAll("a");
                 let validLinks = 0;
                 for (let i = 0; i < links.length; i++) {
@@ -732,6 +762,7 @@
                         validLinks++;
                     }
                 }
+
                 const text = tmp.textContent || "";
                 const words = text.trim().split(/\s+/).filter(Boolean).length;
 
@@ -739,6 +770,16 @@
             } catch (e) {
                 return 50;
             }
+        }
+
+        async findPageForBand(band) {
+            for (let i = 0; i < 20; i++) {
+                const candidate = await this.getRandomPage();
+                const score = await this.estimateDifficultyForTitle(candidate);
+                const candidateBand = this.bandForScore(score);
+                if (candidateBand === band) return candidate;
+            }
+            return null;
         }
 
         async loadPage(title, isFirstPage) {
@@ -764,9 +805,10 @@
                 const html = data.parse.text["*"] || "";
                 this.render(html);
 
-                // After render, count links inside .wiki-content to keep behaviour consistent
                 const container = document.querySelector(".wiki-content");
                 let validLinks = 0;
+                let words = 0;
+
                 if (container) {
                     const links = container.querySelectorAll("a");
                     for (let i = 0; i < links.length; i++) {
@@ -776,25 +818,27 @@
                         }
                     }
 
-                    // word count: strip text and count
                     const text = container.textContent || "";
-                    const words = text.trim().split(/\s+/).filter(Boolean).length;
-
-                    this.currentLinkCount = validLinks;
-                    this.currentWordCount = words;
-                } else {
-                    this.currentLinkCount = 0;
-                    this.currentWordCount = 0;
+                    words = text.trim().split(/\s+/).filter(Boolean).length;
                 }
 
-                if (isFirstPage) {
-                    this.difficultyScore = this.computeDifficultyScore(
-                        this.currentLinkCount,
-                        this.currentWordCount
-                    );
-                    this.difficultyName = difficultyLabelFromScore(this.difficultyScore);
-                    this.updateHeaderStats();
+                this.currentLinkCount = validLinks;
+                this.currentWordCount = words;
+
+                if (normalizeTitle(apiTitle) === normalizeTitle(this.startPage)) {
+                    // Recompute start difficulty if needed
+                    if (this.startDifficultyScore == null) {
+                        this.startDifficultyScore = this.computeDifficultyScore(validLinks, words);
+                        this.startDifficultyName = difficultyLabelFromScore(this.startDifficultyScore);
+                    }
+                } else if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
+                    if (this.targetDifficultyScore == null) {
+                        this.targetDifficultyScore = this.computeDifficultyScore(validLinks, words);
+                        this.targetDifficultyName = difficultyLabelFromScore(this.targetDifficultyScore);
+                    }
                 }
+
+                this.updateHeaderStats();
 
                 if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
                     this.victory();
@@ -827,19 +871,13 @@
             const backEl = document.getElementById("back-uses-value");
 
             if (diffEl) {
-                if (this.difficultyScore == null) {
-                    diffEl.textContent = "Calculating...";
-                } else {
-                    diffEl.textContent =
-                        this.difficultyName +
-                        " (" +
-                        this.difficultyScore +
-                        " | " +
-                        this.currentLinkCount +
-                        " links, " +
-                        this.currentWordCount +
-                        " words)";
-                }
+                const startText = this.startDifficultyScore == null
+                    ? "Start: calculating"
+                    : "Start: " + this.startDifficultyName + " (" + this.startDifficultyScore + ")";
+                const targetText = this.targetDifficultyScore == null
+                    ? "Target: calculating"
+                    : "Target: " + this.targetDifficultyName + " (" + this.targetDifficultyScore + ")";
+                diffEl.textContent = startText + " | " + targetText;
             }
 
             if (linksEl) {
@@ -853,16 +891,10 @@
 
         render(htmlContent) {
             const diffText =
-                this.difficultyScore == null
-                    ? "Calculating..."
-                    : this.difficultyName +
-                      " (" +
-                      this.difficultyScore +
-                      " | " +
-                      this.currentLinkCount +
-                      " links, " +
-                      this.currentWordCount +
-                      " words)";
+                (this.startDifficultyScore == null || this.targetDifficultyScore == null)
+                    ? "Start: calculating | Target: calculating"
+                    : "Start: " + this.startDifficultyName + " (" + this.startDifficultyScore + ")" +
+                      " | Target: " + this.targetDifficultyName + " (" + this.targetDifficultyScore + ")";
 
             document.getElementById("app").innerHTML =
                 '<div class="header">' +
@@ -877,9 +909,9 @@
                             '<span class="stat-label">Time</span>' +
                             '<span class="stat-value" id="timer">0:00</span>' +
                         '</div>' +
-                        '<div class="stat-item">' +
+                        '<div class="stat-item" style="min-width:220px;">' +
                             '<span class="stat-label">Difficulty</span>' +
-                            '<span class="stat-value" id="difficulty-value">' +
+                            '<span class="stat-value" id="difficulty-value" style="font-size:12px;line-height:1.3;">' +
                             diffText +
                             '</span>' +
                         '</div>' +
@@ -902,12 +934,27 @@
                     '</div>' +
                 '</div>' +
                 '<div class="target-bar">' +
-                    '<div>Current:<span class="target-title">' +
-                    this.currentPage +
-                    '</span></div>' +
-                    '<div>Target:<span class="target-title">' +
-                    this.targetPage +
-                    '</span></div>' +
+                    '<div class="target-row">' +
+                        '<div>Current:<span class="target-title">' +
+                        this.currentPage +
+                        '</span></div>' +
+                    '</div>' +
+                    '<div class="target-row">' +
+                        '<div>Start:<span class="target-title">' + this.startPage + '</span></div>' +
+                        '<div class="diff-chip">' +
+                        (this.startDifficultyScore == null
+                            ? "Start diff: ?"
+                            : this.startDifficultyName + " (" + this.startDifficultyScore + ")") +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="target-row">' +
+                        '<div>Target:<span class="target-title">' + this.targetPage + '</span></div>' +
+                        '<div class="diff-chip">' +
+                        (this.targetDifficultyScore == null
+                            ? "Target diff: ?"
+                            : this.targetDifficultyName + " (" + this.targetDifficultyScore + ")") +
+                        '</div>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="content">' +
                     '<div class="wiki-content">' +
@@ -1044,6 +1091,14 @@
                     '<div class="victory">' +
                         '<p><strong>Total clicks:</strong> ' + totalClicks + '</p>' +
                         '<p><strong>Time:</strong> ' + finalTime + '</p>' +
+                        '<p><strong>Start difficulty:</strong> ' +
+                            (this.startDifficultyName || "?") + " (" +
+                            (this.startDifficultyScore != null ? this.startDifficultyScore : "?") +
+                            ')</p>' +
+                        '<p><strong>Target difficulty:</strong> ' +
+                            (this.targetDifficultyName || "?") + " (" +
+                            (this.targetDifficultyScore != null ? this.targetDifficultyScore : "?") +
+                            ')</p>' +
                     '</div>' +
                     '<div class="settings-group">' +
                         '<div class="setting-label">Journey</div>' +
