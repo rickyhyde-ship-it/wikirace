@@ -390,6 +390,12 @@
         }
     }
 
+    // Normalise titles for comparison: spaces, underscores, case
+    function normalizeTitle(t) {
+        if (!t) return "";
+        return t.replace(/_/g, " ").trim().toLowerCase();
+    }
+
     class WikiRaceGame {
         constructor() {
             this.startPage = null;
@@ -406,11 +412,11 @@
             this.selectedDifficultyBand = "auto";
             this.pendingNavigation = false;
 
-            this.freeClickNext = false;      // for redirect free pass
-            this.backLimit = 0;              // allowed back uses this game
-            this.backUsesLeft = 0;           // remaining back uses
-            this.history = [];               // list of titles visited
-            this.historyStack = [];          // for back navigation
+            this.freeClickNext = false;
+            this.backLimit = 0;
+            this.backUsesLeft = 0;
+            this.history = [];
+            this.historyStack = [];
 
             this.init();
         }
@@ -769,7 +775,9 @@
                     throw new Error(data.error.info);
                 }
 
-                this.currentPage = title;
+                const apiTitle = data.parse && data.parse.title ? data.parse.title : title;
+
+                this.currentPage = apiTitle;
                 this.currentLinkCount = 0;
 
                 this.render(data.parse.text["*"]);
@@ -801,12 +809,15 @@
                 this.currentLinkCount = validLinks;
 
                 if (isFirstPage) {
-                    this.currentPageviews = await this.fetchPageviews(title);
+                    this.currentPageviews = await this.fetchPageviews(apiTitle);
                     this.computeDifficulty();
                     this.updateHeaderStats();
                 }
 
-                if (title === this.targetPage) {
+                // Check victory using normalised titles
+                if (
+                    normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)
+                ) {
                     this.victory();
                 }
             } catch (error) {
@@ -943,8 +954,6 @@
                                 href.replace("/wiki/", "")
                             );
 
-                            // Redirect pages: if current page is a redirect template,
-                            // flag that next click is free. Simple heuristic:
                             const isRedirectPage =
                                 document.body.innerHTML.indexOf("This page is a redirect") !== -1;
 
@@ -952,14 +961,12 @@
                                 gameRef.freeClickNext = true;
                             }
 
-                            // handle clicks with free pass
                             if (gameRef.freeClickNext) {
                                 gameRef.freeClickNext = false;
                             } else {
                                 gameRef.clicks++;
                             }
 
-                            // push to history
                             gameRef.history.push(title);
                             gameRef.historyStack.push(gameRef.currentPage);
 
@@ -997,7 +1004,6 @@
                 const prevTitle = gameRef.historyStack.pop();
                 gameRef.history.push(prevTitle);
 
-                // back counts as 2 clicks
                 gameRef.clicks += 2;
                 gameRef.backUsesLeft--;
 
@@ -1045,7 +1051,6 @@
                 minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
             const totalClicks = this.clicks;
 
-            // show summary screen with journey
             const journeyItems = this.history
                 .map(function (t) {
                     return "<li>" + t + "</li>";
