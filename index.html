@@ -194,7 +194,6 @@
             border: 2px solid #27ae60;
         }
 
-        /* Fix Wikipedia content overflow on mobile */
         .wiki-content {
             max-width: 100%;
             overflow-x: hidden;
@@ -209,9 +208,7 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        .wiki-content * {
-            max-width: 100%;
-        }
+        .wiki-content * { max-width: 100%; }
 
         .wiki-content a {
             color: #0645ad;
@@ -222,7 +219,7 @@
 
         .wiki-content a:hover { text-decoration: underline; }
 
-        .wiki-content img { 
+        .wiki-content img {
             max-width: 100% !important;
             height: auto !important;
             width: auto !important;
@@ -307,13 +304,11 @@
             .stats { font-size: 12px; gap: 12px; }
             .stat-value { font-size: 16px; }
             .menu h1 { font-size: 24px; }
-            .content { 
+            .content {
                 max-height: calc(100vh - 290px);
                 padding: 15px;
             }
-            .wiki-content table {
-                font-size: 14px;
-            }
+            .wiki-content table { font-size: 14px; }
         }
     </style>
 </head>
@@ -327,26 +322,15 @@
     const PAGEVIEWS_BASE =
         "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/";
 
-    function clamp01(x) {
-        if (x < 0) return 0;
-        if (x > 1) return 1;
-        return x;
-    }
-
-    function difficultyLabel(score) {
-        if (score < 20) return "Very Easy";
-        if (score < 40) return "Easy";
-        if (score < 60) return "Medium";
-        if (score < 80) return "Hard";
-        return "Insane";
-    }
-
-    function bandForScore(score) {
-        if (score < 20) return "veryeasy";
-        if (score < 40) return "easy";
-        if (score < 60) return "medium";
-        if (score < 80) return "hard";
-        return "insane";
+    // Map raw 2‑month view totals into your named bands
+    function difficultyLabelFromViews(views) {
+        if (views == null) return "Unknown";
+        if (views >= 2500000) return "Very Easy";
+        if (views >= 1000000) return "Easy";
+        if (views >= 500000)  return "Medium";
+        if (views >= 100000)  return "Hard";
+        if (views >= 10000)   return "Hardcore";
+        return "Crack Head Mode";
     }
 
     function debounce(fn, delay) {
@@ -388,8 +372,7 @@
             this.timerInterval = null;
             this.gameActive = false;
             this.currentLinkCount = 0;
-            this.currentPageviews = null;
-            this.difficultyScore = null;
+            this.currentPageviews = null;   // 2‑month sum
             this.difficultyName = "";
             this.selectedDifficultyBand = "auto";
             this.pendingNavigation = false;
@@ -438,14 +421,15 @@
                     '</div>' +
 
                     '<div class="settings-group">' +
-                        '<div class="setting-label">Difficulty</div>' +
+                        '<div class="setting-label">Difficulty (start-page views)</div>' +
                         '<select id="difficulty-select" class="difficulty-select">' +
-                            '<option value="auto">Auto (any)</option>' +
+                            '<option value="auto">Any</option>' +
                             '<option value="veryeasy">Very Easy</option>' +
                             '<option value="easy">Easy</option>' +
                             '<option value="medium">Medium</option>' +
                             '<option value="hard">Hard</option>' +
-                            '<option value="insane">Insane</option>' +
+                            '<option value="hardcore">Hardcore</option>' +
+                            '<option value="crack">Crack Head Mode</option>' +
                         '</select>' +
                     '</div>' +
 
@@ -577,6 +561,18 @@
             container.style.display = "block";
         }
 
+        // Map difficulty label to a band code we can test quickly
+        bandForViews(views) {
+            const label = difficultyLabelFromViews(views);
+            if (label === "Very Easy") return "veryeasy";
+            if (label === "Easy") return "easy";
+            if (label === "Medium") return "medium";
+            if (label === "Hard") return "hard";
+            if (label === "Hardcore") return "hardcore";
+            if (label === "Crack Head Mode") return "crack";
+            return "unknown";
+        }
+
         async prepareGameFromSettings(isVSMode) {
             const startInput = document.getElementById("start-input");
             const targetInput = document.getElementById("target-input");
@@ -626,7 +622,6 @@
                 this.startTime = Date.now();
                 this.gameActive = true;
                 this.currentPageviews = null;
-                this.difficultyScore = null;
                 this.difficultyName = "";
                 this.freeClickNext = false;
                 this.history = [this.startPage];
@@ -673,7 +668,6 @@
                 this.startTime = Date.now();
                 this.gameActive = true;
                 this.currentPageviews = null;
-                this.difficultyScore = null;
                 this.difficultyName = "";
                 this.freeClickNext = false;
                 this.backUsesLeft = this.backLimit;
@@ -699,6 +693,7 @@
             return data.query.random[0].title;
         }
 
+        // 2‑month pageview sum
         async fetchPageviews(title) {
             try {
                 var encoded = encodeURIComponent(title.replace(/ /g, "_"));
@@ -735,17 +730,12 @@
         }
 
         async findPageForBand(band) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 20; i++) {
                 const candidate = await this.getRandomPage();
                 const views = await this.fetchPageviews(candidate);
                 if (views == null) continue;
-
-                const P = Math.log10(views + 1);
-                const Pn = clamp01((P - 0) / (6 - 0));
-                const Dp = 1 - Pn;
-                const scoreApprox = 100 * (0.8 * Dp + 0.2 * 0.5);
-                const bandApprox = bandForScore(scoreApprox);
-                if (bandApprox === band) return candidate;
+                const candidateBand = this.bandForViews(views);
+                if (candidateBand === band) return candidate;
             }
             return null;
         }
@@ -801,7 +791,7 @@
 
                 if (isFirstPage) {
                     this.currentPageviews = await this.fetchPageviews(apiTitle);
-                    this.computeDifficulty();
+                    this.computeDifficultyFromViews();
                     this.updateHeaderStats();
                 }
 
@@ -815,26 +805,12 @@
             }
         }
 
-        computeDifficulty() {
+        computeDifficultyFromViews() {
             if (this.currentPageviews == null) {
-                this.difficultyScore = null;
                 this.difficultyName = "Unknown";
-                return;
+            } else {
+                this.difficultyName = difficultyLabelFromViews(this.currentPageviews);
             }
-
-            const pageviews = this.currentPageviews;
-            const P = Math.log10(pageviews + 1);
-            const Pn = clamp01((P - 0) / (6 - 0));
-
-            const L = this.currentLinkCount;
-            const Lcap = 300;
-            const Ln = Lcap > 0 ? Math.min(L, Lcap) / Lcap : 0;
-
-            const Dp = 1 - Pn;
-            const Dl = 1 - Ln;
-            const score = 100 * (0.8 * Dp + 0.2 * Dl);
-            this.difficultyScore = Math.round(score);
-            this.difficultyName = difficultyLabel(this.difficultyScore);
         }
 
         updateHeaderStats() {
@@ -843,11 +819,11 @@
             const backEl = document.getElementById("back-uses-value");
 
             if (diffEl) {
-                if (this.difficultyScore == null) {
+                if (this.currentPageviews == null) {
                     diffEl.textContent = "Calculating...";
                 } else {
                     diffEl.textContent =
-                        this.difficultyName + " (" + this.difficultyScore + ")";
+                        this.difficultyName + " (" + this.currentPageviews.toLocaleString() + " views)";
                 }
             }
 
@@ -861,10 +837,10 @@
         }
 
         render(htmlContent) {
-            const difficultyText =
-                this.difficultyScore == null
+            const diffText =
+                this.currentPageviews == null
                     ? "Calculating..."
-                    : this.difficultyName + " (" + this.difficultyScore + ")";
+                    : this.difficultyName + " (" + this.currentPageviews.toLocaleString() + " views)";
 
             document.getElementById("app").innerHTML =
                 '<div class="header">' +
@@ -882,7 +858,7 @@
                         '<div class="stat-item">' +
                             '<span class="stat-label">Difficulty</span>' +
                             '<span class="stat-value" id="difficulty-value">' +
-                            difficultyText +
+                            diffText +
                             '</span>' +
                         '</div>' +
                         '<div class="stat-item">' +
@@ -942,9 +918,8 @@
                                 href.replace("/wiki/", "")
                             );
 
-                            // Check for redirect in the wiki-content div only
                             const wikiContent = document.querySelector(".wiki-content");
-                            const isRedirectPage = wikiContent && 
+                            const isRedirectPage = wikiContent &&
                                 wikiContent.innerHTML.indexOf("This page is a redirect") !== -1;
 
                             if (isRedirectPage) {
