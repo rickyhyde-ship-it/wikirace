@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>WikiRace - Wikipedia Link Game</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -45,10 +41,7 @@
             flex-wrap: wrap;
         }
 
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-        }
+        .stat-item { display: flex; flex-direction: column; }
 
         .stat-label {
             font-size: 11px;
@@ -56,10 +49,7 @@
             text-transform: uppercase;
         }
 
-        .stat-value {
-            font-size: 18px;
-            font-weight: bold;
-        }
+        .stat-value { font-size: 18px; font-weight: bold; }
 
         .target-bar {
             background: #dfe8ff;
@@ -72,11 +62,7 @@
             gap: 10px;
         }
 
-        .target-title {
-            font-weight: bold;
-            font-size: 16px;
-            margin-left: 4px;
-        }
+        .target-title { font-weight: bold; font-size: 16px; margin-left: 4px; }
 
         .content {
             padding: 20px;
@@ -86,9 +72,7 @@
             background: white;
         }
 
-        .menu {
-            padding: 30px 20px 40px 20px;
-        }
+        .menu { padding: 30px 20px 40px 20px; }
 
         .menu h1 {
             color: #1f3270;
@@ -96,9 +80,7 @@
             font-size: 30px;
         }
 
-        .settings-group {
-            margin-bottom: 20px;
-        }
+        .settings-group { margin-bottom: 20px; }
 
         .setting-label {
             font-size: 14px;
@@ -142,7 +124,8 @@
             font-weight: 500;
         }
 
-        .small-btn {
+        .small-btn,
+        .secondary-btn {
             background: #1f3270;
             color: white;
             border: none;
@@ -152,9 +135,8 @@
             cursor: pointer;
         }
 
-        .small-btn:hover {
-            background: #18285a;
-        }
+        .small-btn:hover,
+        .secondary-btn:hover { background: #18285a; }
 
         .difficulty-select,
         .back-select {
@@ -193,21 +175,7 @@
             margin-top: 10px;
         }
 
-        .primary-btn[disabled] {
-            opacity: 0.6;
-            cursor: default;
-        }
-
-        .secondary-btn {
-            background: #555;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-
+        .primary-btn[disabled],
         .secondary-btn[disabled] {
             opacity: 0.4;
             cursor: default;
@@ -230,14 +198,9 @@
             cursor: pointer;
         }
 
-        .wiki-content a:hover {
-            text-decoration: underline;
-        }
+        .wiki-content a:hover { text-decoration: underline; }
 
-        .wiki-content img {
-            max-width: 100%;
-            height: auto;
-        }
+        .wiki-content img { max-width: 100%; height: auto; }
 
         .wiki-content h1, .wiki-content h2 {
             margin: 15px 0 10px 0;
@@ -294,13 +257,9 @@
             border-bottom: 1px solid #eee;
         }
 
-        .suggestion-item:last-child {
-            border-bottom: none;
-        }
+        .suggestion-item:last-child { border-bottom: none; }
 
-        .suggestion-item:hover {
-            background: #f0f3ff;
-        }
+        .suggestion-item:hover { background: #f0f3ff; }
 
         .journey-list {
             margin-top: 10px;
@@ -309,28 +268,13 @@
             overflow-y: auto;
         }
 
-        .journey-list li {
-            margin-bottom: 4px;
-            font-size: 14px;
-        }
+        .journey-list li { margin-bottom: 4px; font-size: 14px; }
 
         @media (max-width: 700px) {
-            .stats {
-                font-size: 12px;
-                gap: 12px;
-            }
-
-            .stat-value {
-                font-size: 16px;
-            }
-
-            .menu h1 {
-                font-size: 24px;
-            }
-
-            .content {
-                max-height: calc(100vh - 290px);
-            }
+            .stats { font-size: 12px; gap: 12px; }
+            .stat-value { font-size: 16px; }
+            .menu h1 { font-size: 24px; }
+            .content { max-height: calc(100vh - 290px); }
         }
     </style>
 </head>
@@ -390,7 +334,6 @@
         }
     }
 
-    // Normalise titles for comparison: spaces, underscores, case
     function normalizeTitle(t) {
         if (!t) return "";
         return t.replace(/_/g, " ").trim().toLowerCase();
@@ -419,6 +362,14 @@
             this.historyStack = [];
 
             this.init();
+        }
+
+        // centralised click increment
+        incrementClicks(amount) {
+            if (amount <= 0) return;
+            this.clicks += amount;
+            const clicksEl = document.getElementById("clicks-value");
+            if (clicksEl) clicksEl.textContent = this.clicks.toString();
         }
 
         init() {
@@ -814,10 +765,7 @@
                     this.updateHeaderStats();
                 }
 
-                // Check victory using normalised titles
-                if (
-                    normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)
-                ) {
+                if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
                     this.victory();
                 }
             } catch (error) {
@@ -962,19 +910,14 @@
                             }
 
                             if (gameRef.freeClickNext) {
-                                gameRef.freeClickNext = false;
+                                gameRef.freeClickNext = false; // free pass, no increment
                             } else {
-                                gameRef.clicks++;
+                                gameRef.incrementClicks(1);     // normal forward click
                             }
 
                             gameRef.history.push(title);
                             gameRef.historyStack.push(gameRef.currentPage);
 
-                            const clicksEl =
-                                document.getElementById("clicks-value");
-                            if (clicksEl)
-                                clicksEl.textContent =
-                                    gameRef.clicks.toString();
                             gameRef.loadPage(title, false);
                         });
                     } else {
@@ -1004,13 +947,12 @@
                 const prevTitle = gameRef.historyStack.pop();
                 gameRef.history.push(prevTitle);
 
-                gameRef.clicks += 2;
+                gameRef.incrementClicks(2);   // back costs 2 clicks
                 gameRef.backUsesLeft--;
 
-                const clicksEl = document.getElementById("clicks-value");
-                if (clicksEl) clicksEl.textContent = gameRef.clicks.toString();
                 gameRef.updateHeaderStats();
                 gameRef.loadPage(prevTitle, false);
+                updateState();
             });
         }
 
