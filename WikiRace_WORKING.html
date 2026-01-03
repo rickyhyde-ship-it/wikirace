@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WikiRace - Wikipedia Link Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fdfde0;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .header {
+            background: #1f3270;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            opacity: 0.8;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .target-bar {
+            background: #dfe8ff;
+            padding: 12px 20px;
+            color: #1f3270;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .target-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-left: 4px;
+        }
+
+        .content {
+            padding: 20px;
+            max-height: calc(100vh - 270px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            background: white;
+        }
+
+        .menu {
+            padding: 30px 20px 40px 20px;
+        }
+
+        .menu h1 {
+            color: #1f3270;
+            margin-bottom: 20px;
+            font-size: 30px;
+        }
+
+        .settings-group {
+            margin-bottom: 20px;
+        }
+
+        .setting-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-input {
+            flex: 1;
+            background: #fdfde0;
+            border: 2px solid #1f3270;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 15px;
+            color: #1f3270;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .settings-input.readonly {
+            pointer-events: none;
+        }
+
+        .small-btn {
+            background: #1f3270;
+            color: white;
+            border: none;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .small-btn:hover {
+            background: #18285a;
+        }
+
+        .difficulty-select {
+            width: 100%;
+            background: #fdfde0;
+            border: 2px solid #1f3270;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 15px;
+            color: #1f3270;
+            font-weight: 500;
+        }
+
+        .player-chip {
+            display: inline-block;
+            margin-top: 10px;
+            margin-bottom: 25px;
+            padding: 8px 20px;
+            border-radius: 20px;
+            background: #1f3270;
+            color: white;
+            font-weight: 600;
+        }
+
+        .primary-btn {
+            background: #1f3270;
+            color: white;
+            border: none;
+            padding: 16px 20px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .primary-btn[disabled] {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .wiki-content a {
+            color: #0645ad;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .wiki-content a:hover {
+            text-decoration: underline;
+        }
+
+        .wiki-content img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .wiki-content h1, .wiki-content h2 {
+            margin: 15px 0 10px 0;
+            color: #2c3e50;
+        }
+
+        .wiki-content p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .victory {
+            background: #27ae60;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 700px) {
+            .stats {
+                font-size: 12px;
+                gap: 12px;
+            }
+
+            .stat-value {
+                font-size: 16px;
+            }
+
+            .menu h1 {
+                font-size: 24px;
+            }
+
+            .content {
+                max-height: calc(100vh - 290px);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="app"></div>
+</div>
+
+<script>
+    const API_BASE = "https://en.wikipedia.org/w/api.php";
+    const PAGEVIEWS_BASE =
+        "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/";
+
+    function clamp01(x) {
+        if (x < 0) return 0;
+        if (x > 1) return 1;
+        return x;
+    }
+
+    function difficultyLabel(score) {
+        if (score < 20) return "Very Easy";
+        if (score < 40) return "Easy";
+        if (score < 60) return "Medium";
+        if (score < 80) return "Hard";
+        return "Insane";
+    }
+
+    function bandForScore(score) {
+        if (score < 20) return "veryeasy";
+        if (score < 40) return "easy";
+        if (score < 60) return "medium";
+        if (score < 80) return "hard";
+        return "insane";
+    }
+
+    class WikiRaceGame {
+        constructor() {
+            this.startPage = null;
+            this.targetPage = null;
+            this.currentPage = null;
+            this.clicks = 0;
+            this.startTime = null;
+            this.timerInterval = null;
+            this.gameActive = false;
+            this.currentLinkCount = 0;
+            this.currentPageviews = null;
+            this.difficultyScore = null;
+            this.difficultyName = "";
+            this.selectedDifficultyBand = "auto";
+            this.pendingNavigation = false;
+
+            this.init();
+        }
+
+        init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const challengeStart = urlParams.get("start");
+            const challengeTarget = urlParams.get("target");
+
+            if (challengeStart && challengeTarget) {
+                this.startChallengeMode(challengeStart, challengeTarget);
+            } else {
+                this.showMenu();
+            }
+        }
+
+        showMenu() {
+            const app = document.getElementById("app");
+            app.innerHTML =
+                '<div class="menu">' +
+                    '<h1>Settings</h1>' +
+
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Language</div>' +
+                        '<div class="settings-row">' +
+                            '<div class="settings-input readonly">English</div>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Start</div>' +
+                        '<div class="settings-row">' +
+                            '<div id="start-title" class="settings-input readonly">Random...</div>' +
+                            '<button class="small-btn" id="random-start-btn">🎲</button>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Destination</div>' +
+                        '<div class="settings-row">' +
+                            '<div id="target-title" class="settings-input readonly">Random...</div>' +
+                            '<button class="small-btn" id="random-target-btn">🎲</button>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Difficulty</div>' +
+                        '<select id="difficulty-select" class="difficulty-select">' +
+                            '<option value="auto">Auto (any)</option>' +
+                            '<option value="veryeasy">Very Easy</option>' +
+                            '<option value="easy">Easy</option>' +
+                            '<option value="medium">Medium</option>' +
+                            '<option value="hard">Hard</option>' +
+                            '<option value="insane">Insane</option>' +
+                        '</select>' +
+                    '</div>' +
+
+                    '<div class="player-chip">Solo</div>' +
+
+                    '<button id="start-game-btn" class="primary-btn">Start game</button>' +
+                    '<button id="vs-game-btn" class="primary-btn" style="margin-top:8px;background:#555">Create VS challenge</button>' +
+                '</div>';
+
+            const select = document.getElementById("difficulty-select");
+            const startBtn = document.getElementById("start-game-btn");
+            const vsBtn = document.getElementById("vs-game-btn");
+            const randomStartBtn = document.getElementById("random-start-btn");
+            const randomTargetBtn = document.getElementById("random-target-btn");
+            const self = this;
+
+            select.addEventListener("change", function () {
+                self.selectedDifficultyBand = this.value;
+            });
+
+            randomStartBtn.addEventListener("click", function () {
+                self.randomizeSingle("start");
+            });
+
+            randomTargetBtn.addEventListener("click", function () {
+                self.randomizeSingle("target");
+            });
+
+            startBtn.addEventListener("click", function () {
+                self.startNewGame();
+            });
+
+            vsBtn.addEventListener("click", function () {
+                self.startVSMode();
+            });
+
+            // Initialize with random titles
+            this.randomizeSingle("start");
+            this.randomizeSingle("target");
+        }
+
+        async randomizeSingle(which) {
+            const title = await this.getRandomPage();
+            if (which === "start") {
+                this.startPage = title;
+                const el = document.getElementById("start-title");
+                if (el) el.textContent = title;
+            } else {
+                this.targetPage = title;
+                const el = document.getElementById("target-title");
+                if (el) el.textContent = title;
+            }
+        }
+
+        async startNewGame() {
+            if (!this.startPage || !this.targetPage) {
+                return;
+            }
+            this.showLoading("Setting up game...");
+
+            try {
+                // Ensure start page roughly matches difficulty band if not auto
+                if (this.selectedDifficultyBand !== "auto") {
+                    const constrained = await this.findPageForBand(this.selectedDifficultyBand);
+                    if (constrained) {
+                        this.startPage = constrained;
+                        const el = document.getElementById("start-title");
+                        if (el) el.textContent = this.startPage;
+                    }
+                }
+
+                this.currentPage = this.startPage;
+                this.clicks = 0;
+                this.startTime = Date.now();
+                this.gameActive = true;
+                this.currentPageviews = null;
+                this.difficultyScore = null;
+                this.difficultyName = "";
+
+                this.startTimer();
+                await this.loadPage(this.startPage, true);
+            } catch (e) {
+                this.showError("Failed to start game.");
+            }
+        }
+
+        async startVSMode() {
+            this.showLoading("Creating VS challenge...");
+            try {
+                // If user didn't touch start/target, ensure they exist
+                if (!this.startPage) this.startPage = await this.getRandomPage();
+                if (!this.targetPage) this.targetPage = await this.getRandomPage();
+
+                const start = this.startPage;
+                const target = this.targetPage;
+
+                const shareUrl = window.location.origin + window.location.pathname +
+                    "?start=" + encodeURIComponent(start) +
+                    "&target=" + encodeURIComponent(target);
+
+                document.getElementById("app").innerHTML =
+                    '<div class="menu">' +
+                        '<h1>VS Challenge</h1>' +
+                        '<p><strong>Start:</strong> ' + start + '</p>' +
+                        '<p><strong>Target:</strong> ' + target + '</p>' +
+                        '<div class="share-input">' + shareUrl + '</div>' +
+                        '<button class="primary-btn" style="margin-top:15px;" onclick="navigator.clipboard.writeText(\'' + shareUrl + '\').then(function(){ alert(\'Link copied!\'); })">Copy link</button>' +
+                        '<button class="primary-btn" style="margin-top:8px;background:#555" onclick="game.playChallengeNow(\'' + start + '\', \'' + target + '\')">Play this challenge</button>' +
+                        '<button class="primary-btn" style="margin-top:8px;background:#999" onclick="game.showMenu()">Back to settings</button>' +
+                    '</div>';
+            } catch (e) {
+                this.showError("Failed to create challenge.");
+            }
+        }
+
+        async startChallengeMode(start, target) {
+            this.showLoading("Loading challenge...");
+            try {
+                this.startPage = decodeURIComponent(start);
+                this.targetPage = decodeURIComponent(target);
+                this.currentPage = this.startPage;
+                this.clicks = 0;
+                this.startTime = Date.now();
+                this.gameActive = true;
+                this.currentPageviews = null;
+                this.difficultyScore = null;
+                this.difficultyName = "";
+
+                this.startTimer();
+                await this.loadPage(this.startPage, true);
+            } catch (error) {
+                this.showError("Failed to load challenge.");
+            }
+        }
+
+        playChallengeNow(start, target) {
+            this.startChallengeMode(start, target);
+        }
+
+        async getRandomPage() {
+            const response = await fetch(
+                API_BASE + "?action=query&format=json&list=random&rnnamespace=0&rnlimit=1&origin=*"
+            );
+            const data = await response.json();
+            return data.query.random[0].title;
+        }
+
+        async fetchPageviews(title) {
+            try {
+                var encoded = encodeURIComponent(title.replace(/ /g, "_"));
+                var end = new Date();
+                var start = new Date();
+                start.setMonth(start.getMonth() - 2); // ~60 days
+
+                function fmt(d) {
+                    var y = d.getFullYear();
+                    var m = (d.getMonth() + 1).toString();
+                    if (m.length === 1) m = "0" + m;
+                    var day = d.getDate().toString();
+                    if (day.length === 1) day = "0" + day;
+                    return "" + y + m + day;
+                }
+
+                var startStr = fmt(start);
+                var endStr = fmt(end);
+
+                var url =
+                    PAGEVIEWS_BASE + encoded + "/daily/" + startStr + "/" + endStr;
+                var res = await fetch(url);
+                if (!res.ok) return null;
+                var json = await res.json();
+                if (!json.items || !json.items.length) return null;
+                var sum = 0;
+                for (var i = 0; i < json.items.length; i++) {
+                    sum += json.items[i].views || 0;
+                }
+                return sum;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async findPageForBand(band) {
+            // Try up to N random pages to hit band
+            for (let i = 0; i < 10; i++) {
+                const candidate = await this.getRandomPage();
+                const views = await this.fetchPageviews(candidate);
+                if (views == null) continue;
+
+                // approximate difficulty from views only (fast check)
+                const P = Math.log10(views + 1);
+                const Pn = clamp01((P - 0) / (6 - 0));
+                const Dp = 1 - Pn;
+                const scoreApprox = 100 * (0.6 * Dp + 0.4 * 0.5); // assume medium links
+                const bandApprox = bandForScore(scoreApprox);
+                if (bandApprox === band) return candidate;
+            }
+            // fallback
+            return null;
+        }
+
+        async loadPage(title, isFirstPage) {
+            this.pendingNavigation = true;
+            this.showLoading("Loading " + title + "...");
+            try {
+                const response = await fetch(
+                    API_BASE +
+                        "?action=parse&format=json&page=" +
+                        encodeURIComponent(title) +
+                        "&prop=text&disableeditsection=1&disabletoc=1&origin=*"
+                );
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error.info);
+                }
+
+                this.currentPage = title;
+                this.currentLinkCount = 0;
+
+                this.render(data.parse.text["*"]);
+
+                // Normalize image URLs
+                const imgs = document.querySelectorAll(".wiki-content img");
+                for (let i = 0; i < imgs.length; i++) {
+                    const el = imgs[i];
+                    let src = el.getAttribute("src");
+                    if (!src) continue;
+                    if (src.indexOf("//") === 0) {
+                        el.src = "https:" + src;
+                    } else if (src.indexOf("/") === 0 && src.indexOf("//") !== 0) {
+                        el.src = "https://en.wikipedia.org" + src;
+                    }
+                }
+
+                // Count valid links
+                const links = document.querySelectorAll(".wiki-content a");
+                let validLinks = 0;
+                for (let i = 0; i < links.length; i++) {
+                    const href = links[i].getAttribute("href");
+                    if (
+                        href &&
+                        href.indexOf("/wiki/") === 0 &&
+                        href.indexOf(":") === -1
+                    ) {
+                        validLinks++;
+                    }
+                }
+                this.currentLinkCount = validLinks;
+
+                if (isFirstPage) {
+                    this.currentPageviews = await this.fetchPageviews(title);
+                    this.computeDifficulty();
+                    this.updateHeaderStats();
+                }
+
+                if (title === this.targetPage) {
+                    this.victory();
+                }
+            } catch (error) {
+                this.showError("Failed to load page: " + title);
+            } finally {
+                this.pendingNavigation = false;
+            }
+        }
+
+        computeDifficulty() {
+            if (this.currentPageviews == null) {
+                this.difficultyScore = null;
+                this.difficultyName = "Unknown";
+                return;
+            }
+
+            const pageviews = this.currentPageviews;
+            const P = Math.log10(pageviews + 1);
+            const Pn = clamp01((P - 0) / (6 - 0));
+
+            const L = this.currentLinkCount;
+            const Lcap = 300;
+            const Ln = Lcap > 0 ? Math.min(L, Lcap) / Lcap : 0;
+
+            const Dp = 1 - Pn;
+            const Dl = 1 - Ln;
+            const score = 100 * (0.6 * Dp + 0.4 * Dl);
+            this.difficultyScore = Math.round(score);
+            this.difficultyName = difficultyLabel(this.difficultyScore);
+        }
+
+        updateHeaderStats() {
+            const diffEl = document.getElementById("difficulty-value");
+            const linksEl = document.getElementById("links-value");
+
+            if (diffEl) {
+                if (this.difficultyScore == null) {
+                    diffEl.textContent = "Calculating...";
+                } else {
+                    diffEl.textContent =
+                        this.difficultyName + " (" + this.difficultyScore + ")";
+                }
+            }
+
+            if (linksEl) {
+                linksEl.textContent = this.currentLinkCount.toString();
+            }
+        }
+
+        render(htmlContent) {
+            const difficultyText =
+                this.difficultyScore == null
+                    ? "Calculating..."
+                    : this.difficultyName + " (" + this.difficultyScore + ")";
+
+            document.getElementById("app").innerHTML =
+                '<div class="header">' +
+                    '<div class="stats">' +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Clicks</span>' +
+                            '<span class="stat-value" id="clicks-value">' +
+                            this.clicks +
+                            "</span>" +
+                        "</div>" +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Time</span>' +
+                            '<span class="stat-value" id="timer">0:00</span>' +
+                        "</div>" +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Difficulty</span>' +
+                            '<span class="stat-value" id="difficulty-value">' +
+                            difficultyText +
+                            "</span>" +
+                        "</div>" +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Links</span>' +
+                            '<span class="stat-value" id="links-value">' +
+                            this.currentLinkCount +
+                            "</span>" +
+                        "</div>" +
+                    "</div>" +
+                    '<button style="width:auto;padding:8px 15px;margin:0;" onclick="game.showMenu()">Menu</button>' +
+                "</div>" +
+                '<div class="target-bar">' +
+                    '<div>Current:<span class="target-title">' +
+                    this.currentPage +
+                    "</span></div>" +
+                    '<div>Target:<span class="target-title">' +
+                    this.targetPage +
+                    "</span></div>" +
+                "</div>" +
+                '<div class="content">' +
+                    '<div class="wiki-content">' +
+                    htmlContent +
+                    "</div>" +
+                "</div>";
+
+            this.attachLinkHandlers();
+            this.updateHeaderStats();
+        }
+
+        attachLinkHandlers() {
+            const links = document.querySelectorAll(".wiki-content a");
+            const gameRef = this;
+
+            for (let i = 0; i < links.length; i++) {
+                (function (link) {
+                    const href = link.getAttribute("href");
+                    if (
+                        href &&
+                        href.indexOf("/wiki/") === 0 &&
+                        href.indexOf(":") === -1
+                    ) {
+                        link.addEventListener("click", function (e) {
+                            e.preventDefault();
+                            if (gameRef.pendingNavigation) return;
+                            const title = decodeURIComponent(
+                                href.replace("/wiki/", "")
+                            );
+                            gameRef.clicks++;
+                            const clicksEl =
+                                document.getElementById("clicks-value");
+                            if (clicksEl)
+                                clicksEl.textContent =
+                                    gameRef.clicks.toString();
+                            gameRef.loadPage(title, false);
+                        });
+                    } else {
+                        link.style.pointerEvents = "none";
+                        link.style.color = "#999";
+                    }
+                })(links[i]);
+            }
+        }
+
+        startTimer() {
+            const gameRef = this;
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+            }
+
+            this.timerInterval = setInterval(function () {
+                const elapsed = Math.floor(
+                    (Date.now() - gameRef.startTime) / 1000
+                );
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                const timerEl = document.getElementById("timer");
+                if (timerEl) {
+                    timerEl.textContent =
+                        minutes +
+                        ":" +
+                        (seconds < 10 ? "0" : "") +
+                        seconds;
+                }
+            }, 1000);
+        }
+
+        victory() {
+            this.gameActive = false;
+            if (this.timerInterval) clearInterval(this.timerInterval);
+
+            const elapsed = Math.floor(
+                (Date.now() - this.startTime) / 1000
+            );
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+
+            const msg =
+                "Victory!\n\nClicks: " +
+                this.clicks +
+                "\nTime: " +
+                minutes +
+                ":" +
+                (seconds < 10 ? "0" : "") +
+                seconds +
+                "\n\nPlay again?";
+
+            const self = this;
+            setTimeout(function () {
+                if (confirm(msg)) {
+                    self.showMenu();
+                } else {
+                    self.showMenu();
+                }
+            }, 500);
+        }
+
+        showLoading(message) {
+            document.getElementById("app").innerHTML =
+                '<div class="loading">' + (message || "Loading...") + "</div>";
+        }
+
+        showError(message) {
+            document.getElementById("app").innerHTML =
+                '<div class="menu">' +
+                    '<div class="error">' +
+                    message +
+                    "</div>" +
+                    '<button class="primary-btn" onclick="game.showMenu()">Back to settings</button>' +
+                "</div>";
+        }
+    }
+
+    const game = new WikiRaceGame();
+</script>
+</body>
+</html>
