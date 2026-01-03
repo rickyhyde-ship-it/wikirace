@@ -156,7 +156,8 @@
             background: #18285a;
         }
 
-        .difficulty-select {
+        .difficulty-select,
+        .back-select {
             width: 100%;
             background: #fdfde0;
             border: 2px solid #1f3270;
@@ -194,6 +195,21 @@
 
         .primary-btn[disabled] {
             opacity: 0.6;
+            cursor: default;
+        }
+
+        .secondary-btn {
+            background: #555;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .secondary-btn[disabled] {
+            opacity: 0.4;
             cursor: default;
         }
 
@@ -284,6 +300,18 @@
 
         .suggestion-item:hover {
             background: #f0f3ff;
+        }
+
+        .journey-list {
+            margin-top: 10px;
+            padding-left: 18px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .journey-list li {
+            margin-bottom: 4px;
+            font-size: 14px;
         }
 
         @media (max-width: 700px) {
@@ -378,6 +406,12 @@
             this.selectedDifficultyBand = "auto";
             this.pendingNavigation = false;
 
+            this.freeClickNext = false;      // for redirect free pass
+            this.backLimit = 0;              // allowed back uses this game
+            this.backUsesLeft = 0;           // remaining back uses
+            this.history = [];               // list of titles visited
+            this.historyStack = [];          // for back navigation
+
             this.init();
         }
 
@@ -419,6 +453,18 @@
                     '</div>' +
 
                     '<div class="settings-group">' +
+                        '<div class="setting-label">Go back uses (0–5)</div>' +
+                        '<select id="back-select" class="back-select">' +
+                            '<option value="0">0</option>' +
+                            '<option value="1">1</option>' +
+                            '<option value="2">2</option>' +
+                            '<option value="3">3</option>' +
+                            '<option value="4">4</option>' +
+                            '<option value="5">5</option>' +
+                        '</select>' +
+                    '</div>' +
+
+                    '<div class="settings-group">' +
                         '<div class="setting-label">Start</div>' +
                         '<div class="settings-row">' +
                             '<input id="start-input" class="settings-input-field" placeholder="Random article or type title...">' +
@@ -443,6 +489,7 @@
                 '</div>';
 
             const select = document.getElementById("difficulty-select");
+            const backSelect = document.getElementById("back-select");
             const startBtn = document.getElementById("start-game-btn");
             const vsBtn = document.getElementById("vs-game-btn");
             const randomStartBtn = document.getElementById("random-start-btn");
@@ -458,6 +505,11 @@
                 if (!startInput.value) self.startPage = null;
                 if (!targetInput.value) self.targetPage = null;
             });
+
+            backSelect.addEventListener("change", function () {
+                self.backLimit = parseInt(this.value, 10) || 0;
+            });
+            this.backLimit = 0;
 
             randomStartBtn.addEventListener("click", async function () {
                 const title = await self.getRandomPage();
@@ -559,6 +611,10 @@
                 targetInput.value = this.targetPage;
             }
 
+            this.backUsesLeft = this.backLimit;
+            this.history = [];
+            this.historyStack = [];
+
             if (isVSMode) {
                 return this.startVSModeWithCurrentPages();
             } else {
@@ -575,6 +631,9 @@
                 this.currentPageviews = null;
                 this.difficultyScore = null;
                 this.difficultyName = "";
+                this.freeClickNext = false;
+                this.history = [this.startPage];
+                this.historyStack = [];
 
                 this.startTimer();
                 await this.loadPage(this.startPage, true);
@@ -619,6 +678,10 @@
                 this.currentPageviews = null;
                 this.difficultyScore = null;
                 this.difficultyName = "";
+                this.freeClickNext = false;
+                this.backUsesLeft = this.backLimit;
+                this.history = [this.startPage];
+                this.historyStack = [];
 
                 this.startTimer();
                 await this.loadPage(this.startPage, true);
@@ -778,6 +841,7 @@
         updateHeaderStats() {
             const diffEl = document.getElementById("difficulty-value");
             const linksEl = document.getElementById("links-value");
+            const backEl = document.getElementById("back-uses-value");
 
             if (diffEl) {
                 if (this.difficultyScore == null) {
@@ -790,6 +854,10 @@
 
             if (linksEl) {
                 linksEl.textContent = this.currentLinkCount.toString();
+            }
+
+            if (backEl) {
+                backEl.textContent = this.backUsesLeft.toString();
             }
         }
 
@@ -824,8 +892,17 @@
                             this.currentLinkCount +
                             '</span>' +
                         '</div>' +
+                        '<div class="stat-item">' +
+                            '<span class="stat-label">Back left</span>' +
+                            '<span class="stat-value" id="back-uses-value">' +
+                            this.backUsesLeft +
+                            '</span>' +
+                        '</div>' +
                     '</div>' +
-                    '<button style="width:auto;padding:8px 15px;margin:0;" onclick="game.showMenu()">Menu</button>' +
+                    '<div style="display:flex;gap:8px;align-items:center;">' +
+                        '<button class="secondary-btn" id="back-btn">Back (-2)</button>' +
+                        '<button class="secondary-btn" onclick="game.showMenu()">Menu</button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="target-bar">' +
                     '<div>Current:<span class="target-title">' +
@@ -842,6 +919,7 @@
                 '</div>';
 
             this.attachLinkHandlers();
+            this.attachBackHandler();
             this.updateHeaderStats();
         }
 
@@ -860,10 +938,31 @@
                         link.addEventListener("click", function (e) {
                             e.preventDefault();
                             if (gameRef.pendingNavigation) return;
+
                             const title = decodeURIComponent(
                                 href.replace("/wiki/", "")
                             );
-                            gameRef.clicks++;
+
+                            // Redirect pages: if current page is a redirect template,
+                            // flag that next click is free. Simple heuristic:
+                            const isRedirectPage =
+                                document.body.innerHTML.indexOf("This page is a redirect") !== -1;
+
+                            if (isRedirectPage) {
+                                gameRef.freeClickNext = true;
+                            }
+
+                            // handle clicks with free pass
+                            if (gameRef.freeClickNext) {
+                                gameRef.freeClickNext = false;
+                            } else {
+                                gameRef.clicks++;
+                            }
+
+                            // push to history
+                            gameRef.history.push(title);
+                            gameRef.historyStack.push(gameRef.currentPage);
+
                             const clicksEl =
                                 document.getElementById("clicks-value");
                             if (clicksEl)
@@ -877,6 +976,36 @@
                     }
                 })(links[i]);
             }
+        }
+
+        attachBackHandler() {
+            const backBtn = document.getElementById("back-btn");
+            const gameRef = this;
+            if (!backBtn) return;
+
+            function updateState() {
+                backBtn.disabled =
+                    !gameRef.historyStack.length || gameRef.backUsesLeft <= 0;
+            }
+
+            updateState();
+
+            backBtn.addEventListener("click", function () {
+                if (!gameRef.historyStack.length || gameRef.backUsesLeft <= 0) return;
+                if (gameRef.pendingNavigation) return;
+
+                const prevTitle = gameRef.historyStack.pop();
+                gameRef.history.push(prevTitle);
+
+                // back counts as 2 clicks
+                gameRef.clicks += 2;
+                gameRef.backUsesLeft--;
+
+                const clicksEl = document.getElementById("clicks-value");
+                if (clicksEl) clicksEl.textContent = gameRef.clicks.toString();
+                gameRef.updateHeaderStats();
+                gameRef.loadPage(prevTitle, false);
+            });
         }
 
         startTimer() {
@@ -912,24 +1041,32 @@
             const minutes = Math.floor(elapsed / 60);
             const seconds = elapsed % 60;
 
-            const msg =
-                "Victory!\n\nClicks: " +
-                this.clicks +
-                "\nTime: " +
-                minutes +
-                ":" +
-                (seconds < 10 ? "0" : "") +
-                seconds +
-                "\n\nPlay again?";
+            const finalTime =
+                minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+            const totalClicks = this.clicks;
 
-            const self = this;
-            setTimeout(function () {
-                if (confirm(msg)) {
-                    self.showMenu();
-                } else {
-                    self.showMenu();
-                }
-            }, 500);
+            // show summary screen with journey
+            const journeyItems = this.history
+                .map(function (t) {
+                    return "<li>" + t + "</li>";
+                })
+                .join("");
+
+            document.getElementById("app").innerHTML =
+                '<div class="menu">' +
+                    '<h1>Game complete</h1>' +
+                    '<div class="victory">' +
+                        '<p><strong>Total clicks:</strong> ' + totalClicks + '</p>' +
+                        '<p><strong>Time:</strong> ' + finalTime + '</p>' +
+                    '</div>' +
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Journey</div>' +
+                        '<ol class="journey-list">' +
+                            journeyItems +
+                        '</ol>' +
+                    '</div>' +
+                    '<button class="primary-btn" onclick="game.showMenu()">Back to settings</button>' +
+                '</div>';
         }
 
         showLoading(message) {
