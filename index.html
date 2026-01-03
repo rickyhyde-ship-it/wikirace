@@ -114,6 +114,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            position: relative;
         }
 
         .settings-input {
@@ -255,6 +256,36 @@
             margin: 10px 0;
         }
 
+        .suggestions {
+            position: absolute;
+            left: 0;
+            right: 40px;
+            top: 100%;
+            margin-top: 2px;
+            background: #ffffff;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            max-height: 180px;
+            overflow-y: auto;
+            display: none;
+            z-index: 5;
+        }
+
+        .suggestion-item {
+            padding: 8px 10px;
+            font-size: 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background: #f0f3ff;
+        }
+
         @media (max-width: 700px) {
             .stats {
                 font-size: 12px;
@@ -305,6 +336,30 @@
         if (score < 60) return "medium";
         if (score < 80) return "hard";
         return "insane";
+    }
+
+    function debounce(fn, delay) {
+        let t;
+        return function () {
+            const ctx = this, args = arguments;
+            clearTimeout(t);
+            t = setTimeout(function () { fn.apply(ctx, args); }, delay);
+        };
+    }
+
+    async function fetchSuggestions(query) {
+        if (!query || query.length < 2) return [];
+        const url = API_BASE +
+            "?action=opensearch&format=json&limit=5&namespace=0&origin=*&search=" +
+            encodeURIComponent(query);
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data[1] || [];
+        } catch (e) {
+            return [];
+        }
     }
 
     class WikiRaceGame {
@@ -368,6 +423,7 @@
                         '<div class="settings-row">' +
                             '<input id="start-input" class="settings-input-field" placeholder="Random article or type title...">' +
                             '<button class="small-btn" id="random-start-btn">🎲</button>' +
+                            '<div id="start-suggestions" class="suggestions"></div>' +
                         '</div>' +
                     '</div>' +
 
@@ -376,6 +432,7 @@
                         '<div class="settings-row">' +
                             '<input id="target-input" class="settings-input-field" placeholder="Random article or type title...">' +
                             '<button class="small-btn" id="random-target-btn">🎲</button>' +
+                            '<div id="target-suggestions" class="suggestions"></div>' +
                         '</div>' +
                     '</div>' +
 
@@ -392,11 +449,12 @@
             const randomTargetBtn = document.getElementById("random-target-btn");
             const startInput = document.getElementById("start-input");
             const targetInput = document.getElementById("target-input");
+            const startSuggestions = document.getElementById("start-suggestions");
+            const targetSuggestions = document.getElementById("target-suggestions");
             const self = this;
 
             select.addEventListener("change", function () {
                 self.selectedDifficultyBand = this.value;
-                // When difficulty changes, clear cached start/target
                 if (!startInput.value) self.startPage = null;
                 if (!targetInput.value) self.targetPage = null;
             });
@@ -405,16 +463,17 @@
                 const title = await self.getRandomPage();
                 self.startPage = title;
                 startInput.value = title;
+                startSuggestions.style.display = "none";
             });
 
             randomTargetBtn.addEventListener("click", async function () {
                 const title = await self.getRandomPage();
                 self.targetPage = title;
                 targetInput.value = title;
+                targetSuggestions.style.display = "none";
             });
 
             startBtn.addEventListener("click", async function () {
-                // Difficulty first: find a start page matching band if using random
                 await self.prepareGameFromSettings(false);
             });
 
@@ -422,15 +481,57 @@
                 await self.prepareGameFromSettings(true);
             });
 
-            // Initialize difficulty to auto and randomize fields with lazy titles
+            startInput.addEventListener("input", debounce(async function () {
+                const q = this.value.trim();
+                const titles = await fetchSuggestions(q);
+                self.renderSuggestions(titles, startSuggestions, startInput, "start");
+            }, 250));
+
+            targetInput.addEventListener("input", debounce(async function () {
+                const q = this.value.trim();
+                const titles = await fetchSuggestions(q);
+                self.renderSuggestions(titles, targetSuggestions, targetInput, "target");
+            }, 250));
+
+            startInput.addEventListener("blur", function () {
+                setTimeout(function () {
+                    startSuggestions.style.display = "none";
+                }, 200);
+            });
+            targetInput.addEventListener("blur", function () {
+                setTimeout(function () {
+                    targetSuggestions.style.display = "none";
+                }, 200);
+            });
+
             this.selectedDifficultyBand = "auto";
+        }
+
+        renderSuggestions(titles, container, inputEl, which) {
+            container.innerHTML = "";
+            if (!titles || !titles.length) {
+                container.style.display = "none";
+                return;
+            }
+            for (let i = 0; i < titles.length; i++) {
+                const div = document.createElement("div");
+                div.className = "suggestion-item";
+                div.textContent = titles[i];
+                div.addEventListener("click", () => {
+                    inputEl.value = titles[i];
+                    if (which === "start") this.startPage = titles[i];
+                    else this.targetPage = titles[i];
+                    container.style.display = "none";
+                });
+                container.appendChild(div);
+            }
+            container.style.display = "block";
         }
 
         async prepareGameFromSettings(isVSMode) {
             const startInput = document.getElementById("start-input");
             const targetInput = document.getElementById("target-input");
 
-            // Use typed titles if present
             const userStart = startInput.value.trim();
             const userTarget = targetInput.value.trim();
 
@@ -443,7 +544,6 @@
 
             this.showLoading("Setting up...");
 
-            // If start/target missing, generate them based on difficulty
             if (!this.startPage) {
                 if (this.selectedDifficultyBand === "auto") {
                     this.startPage = await this.getRandomPage();
@@ -455,7 +555,6 @@
             }
 
             if (!this.targetPage) {
-                // For now, just random; you could mirror difficulty here as well
                 this.targetPage = await this.getRandomPage();
                 targetInput.value = this.targetPage;
             }
@@ -545,7 +644,7 @@
                 var encoded = encodeURIComponent(title.replace(/ /g, "_"));
                 var end = new Date();
                 var start = new Date();
-                start.setMonth(start.getMonth() - 2); // ~60 days
+                start.setMonth(start.getMonth() - 2);
 
                 function fmt(d) {
                     var y = d.getFullYear();
@@ -576,7 +675,6 @@
         }
 
         async findPageForBand(band) {
-            // Try up to N random pages to approximate band using pageviews only
             for (let i = 0; i < 12; i++) {
                 const candidate = await this.getRandomPage();
                 const views = await this.fetchPageviews(candidate);
@@ -585,7 +683,7 @@
                 const P = Math.log10(views + 1);
                 const Pn = clamp01((P - 0) / (6 - 0));
                 const Dp = 1 - Pn;
-                const scoreApprox = 100 * (0.8 * Dp + 0.2 * 0.5); // assume medium links
+                const scoreApprox = 100 * (0.8 * Dp + 0.2 * 0.5);
                 const bandApprox = bandForScore(scoreApprox);
                 if (bandApprox === band) return candidate;
             }
@@ -613,7 +711,6 @@
 
                 this.render(data.parse.text["*"]);
 
-                // Normalize image URLs
                 const imgs = document.querySelectorAll(".wiki-content img");
                 for (let i = 0; i < imgs.length; i++) {
                     const el = imgs[i];
@@ -626,7 +723,6 @@
                     }
                 }
 
-                // Count valid links
                 const links = document.querySelectorAll(".wiki-content a");
                 let validLinks = 0;
                 for (let i = 0; i < links.length; i++) {
@@ -672,7 +768,6 @@
             const Lcap = 300;
             const Ln = Lcap > 0 ? Math.min(L, Lcap) / Lcap : 0;
 
-            // Heavier weight on pageviews: 80% popularity, 20% links
             const Dp = 1 - Pn;
             const Dl = 1 - Ln;
             const score = 100 * (0.8 * Dp + 0.2 * Dl);
@@ -715,7 +810,7 @@
                         "</div>" +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Time</span>' +
-                            '<span class="stat-value" id="timer">0:00</span>' +
+                            '<span class="stat-value" id="timer">0:00</span>" +
                         "</div>" +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Difficulty</span>' +
