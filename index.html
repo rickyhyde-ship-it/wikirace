@@ -12,6 +12,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 10px;
+            overflow-x: hidden;
         }
 
         .container {
@@ -68,6 +69,7 @@
             padding: 20px;
             max-height: calc(100vh - 270px);
             overflow-y: auto;
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             background: white;
         }
@@ -192,24 +194,55 @@
             border: 2px solid #27ae60;
         }
 
+        /* Fix Wikipedia content overflow on mobile */
+        .wiki-content {
+            max-width: 100%;
+            overflow-x: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .wiki-content table {
+            max-width: 100% !important;
+            display: block;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .wiki-content * {
+            max-width: 100%;
+        }
+
         .wiki-content a {
             color: #0645ad;
             text-decoration: none;
             cursor: pointer;
+            word-break: break-word;
         }
 
         .wiki-content a:hover { text-decoration: underline; }
 
-        .wiki-content img { max-width: 100%; height: auto; }
+        .wiki-content img { 
+            max-width: 100% !important;
+            height: auto !important;
+            width: auto !important;
+        }
 
         .wiki-content h1, .wiki-content h2 {
             margin: 15px 0 10px 0;
             color: #2c3e50;
+            word-wrap: break-word;
         }
 
         .wiki-content p {
             margin-bottom: 10px;
             line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .wiki-content td, .wiki-content th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .victory {
@@ -274,7 +307,13 @@
             .stats { font-size: 12px; gap: 12px; }
             .stat-value { font-size: 16px; }
             .menu h1 { font-size: 24px; }
-            .content { max-height: calc(100vh - 290px); }
+            .content { 
+                max-height: calc(100vh - 290px);
+                padding: 15px;
+            }
+            .wiki-content table {
+                font-size: 14px;
+            }
         }
     </style>
 </head>
@@ -364,12 +403,13 @@
             this.init();
         }
 
-        // centralised click increment
         incrementClicks(amount) {
             if (amount <= 0) return;
             this.clicks += amount;
             const clicksEl = document.getElementById("clicks-value");
-            if (clicksEl) clicksEl.textContent = this.clicks.toString();
+            if (clicksEl) {
+                clicksEl.textContent = this.clicks.toString();
+            }
         }
 
         init() {
@@ -902,17 +942,19 @@
                                 href.replace("/wiki/", "")
                             );
 
-                            const isRedirectPage =
-                                document.body.innerHTML.indexOf("This page is a redirect") !== -1;
+                            // Check for redirect in the wiki-content div only
+                            const wikiContent = document.querySelector(".wiki-content");
+                            const isRedirectPage = wikiContent && 
+                                wikiContent.innerHTML.indexOf("This page is a redirect") !== -1;
 
                             if (isRedirectPage) {
                                 gameRef.freeClickNext = true;
                             }
 
                             if (gameRef.freeClickNext) {
-                                gameRef.freeClickNext = false; // free pass, no increment
+                                gameRef.freeClickNext = false;
                             } else {
-                                gameRef.incrementClicks(1);     // normal forward click
+                                gameRef.incrementClicks(1);
                             }
 
                             gameRef.history.push(title);
@@ -947,7 +989,7 @@
                 const prevTitle = gameRef.historyStack.pop();
                 gameRef.history.push(prevTitle);
 
-                gameRef.incrementClicks(2);   // back costs 2 clicks
+                gameRef.incrementClicks(2);
                 gameRef.backUsesLeft--;
 
                 gameRef.updateHeaderStats();
