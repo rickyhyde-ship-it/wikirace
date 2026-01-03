@@ -130,8 +130,15 @@
             text-overflow: ellipsis;
         }
 
-        .settings-input.readonly {
-            pointer-events: none;
+        .settings-input-field {
+            flex: 1;
+            background: #fdfde0;
+            border: 2px solid #1f3270;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 15px;
+            color: #1f3270;
+            font-weight: 500;
         }
 
         .small-btn {
@@ -187,6 +194,17 @@
         .primary-btn[disabled] {
             opacity: 0.6;
             cursor: default;
+        }
+
+        .share-input {
+            background: white;
+            color: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-size: 12px;
+            border: 2px solid #27ae60;
         }
 
         .wiki-content a {
@@ -329,23 +347,7 @@
                     '<div class="settings-group">' +
                         '<div class="setting-label">Language</div>' +
                         '<div class="settings-row">' +
-                            '<div class="settings-input readonly">English</div>' +
-                        '</div>' +
-                    '</div>' +
-
-                    '<div class="settings-group">' +
-                        '<div class="setting-label">Start</div>' +
-                        '<div class="settings-row">' +
-                            '<div id="start-title" class="settings-input readonly">Random...</div>' +
-                            '<button class="small-btn" id="random-start-btn">🎲</button>' +
-                        '</div>' +
-                    '</div>' +
-
-                    '<div class="settings-group">' +
-                        '<div class="setting-label">Destination</div>' +
-                        '<div class="settings-row">' +
-                            '<div id="target-title" class="settings-input readonly">Random...</div>' +
-                            '<button class="small-btn" id="random-target-btn">🎲</button>' +
+                            '<div class="settings-input">English</div>' +
                         '</div>' +
                     '</div>' +
 
@@ -361,6 +363,22 @@
                         '</select>' +
                     '</div>' +
 
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Start</div>' +
+                        '<div class="settings-row">' +
+                            '<input id="start-input" class="settings-input-field" placeholder="Random article or type title...">' +
+                            '<button class="small-btn" id="random-start-btn">🎲</button>' +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="settings-group">' +
+                        '<div class="setting-label">Destination</div>' +
+                        '<div class="settings-row">' +
+                            '<input id="target-input" class="settings-input-field" placeholder="Random article or type title...">' +
+                            '<button class="small-btn" id="random-target-btn">🎲</button>' +
+                        '</div>' +
+                    '</div>' +
+
                     '<div class="player-chip">Solo</div>' +
 
                     '<button id="start-game-btn" class="primary-btn">Start game</button>' +
@@ -372,63 +390,85 @@
             const vsBtn = document.getElementById("vs-game-btn");
             const randomStartBtn = document.getElementById("random-start-btn");
             const randomTargetBtn = document.getElementById("random-target-btn");
+            const startInput = document.getElementById("start-input");
+            const targetInput = document.getElementById("target-input");
             const self = this;
 
             select.addEventListener("change", function () {
                 self.selectedDifficultyBand = this.value;
+                // When difficulty changes, clear cached start/target
+                if (!startInput.value) self.startPage = null;
+                if (!targetInput.value) self.targetPage = null;
             });
 
-            randomStartBtn.addEventListener("click", function () {
-                self.randomizeSingle("start");
+            randomStartBtn.addEventListener("click", async function () {
+                const title = await self.getRandomPage();
+                self.startPage = title;
+                startInput.value = title;
             });
 
-            randomTargetBtn.addEventListener("click", function () {
-                self.randomizeSingle("target");
+            randomTargetBtn.addEventListener("click", async function () {
+                const title = await self.getRandomPage();
+                self.targetPage = title;
+                targetInput.value = title;
             });
 
-            startBtn.addEventListener("click", function () {
-                self.startNewGame();
+            startBtn.addEventListener("click", async function () {
+                // Difficulty first: find a start page matching band if using random
+                await self.prepareGameFromSettings(false);
             });
 
-            vsBtn.addEventListener("click", function () {
-                self.startVSMode();
+            vsBtn.addEventListener("click", async function () {
+                await self.prepareGameFromSettings(true);
             });
 
-            // Initialize with random titles
-            this.randomizeSingle("start");
-            this.randomizeSingle("target");
+            // Initialize difficulty to auto and randomize fields with lazy titles
+            this.selectedDifficultyBand = "auto";
         }
 
-        async randomizeSingle(which) {
-            const title = await this.getRandomPage();
-            if (which === "start") {
-                this.startPage = title;
-                const el = document.getElementById("start-title");
-                if (el) el.textContent = title;
-            } else {
-                this.targetPage = title;
-                const el = document.getElementById("target-title");
-                if (el) el.textContent = title;
-            }
-        }
+        async prepareGameFromSettings(isVSMode) {
+            const startInput = document.getElementById("start-input");
+            const targetInput = document.getElementById("target-input");
 
-        async startNewGame() {
-            if (!this.startPage || !this.targetPage) {
-                return;
-            }
-            this.showLoading("Setting up game...");
+            // Use typed titles if present
+            const userStart = startInput.value.trim();
+            const userTarget = targetInput.value.trim();
 
-            try {
-                // Ensure start page roughly matches difficulty band if not auto
-                if (this.selectedDifficultyBand !== "auto") {
-                    const constrained = await this.findPageForBand(this.selectedDifficultyBand);
-                    if (constrained) {
-                        this.startPage = constrained;
-                        const el = document.getElementById("start-title");
-                        if (el) el.textContent = this.startPage;
-                    }
+            if (userStart.length > 0) {
+                this.startPage = userStart;
+            }
+            if (userTarget.length > 0) {
+                this.targetPage = userTarget;
+            }
+
+            this.showLoading("Setting up...");
+
+            // If start/target missing, generate them based on difficulty
+            if (!this.startPage) {
+                if (this.selectedDifficultyBand === "auto") {
+                    this.startPage = await this.getRandomPage();
+                } else {
+                    const candidate = await this.findPageForBand(this.selectedDifficultyBand);
+                    this.startPage = candidate || await this.getRandomPage();
                 }
+                startInput.value = this.startPage;
+            }
 
+            if (!this.targetPage) {
+                // For now, just random; you could mirror difficulty here as well
+                this.targetPage = await this.getRandomPage();
+                targetInput.value = this.targetPage;
+            }
+
+            if (isVSMode) {
+                return this.startVSModeWithCurrentPages();
+            } else {
+                return this.startNewGameWithCurrentPages();
+            }
+        }
+
+        async startNewGameWithCurrentPages() {
+            try {
                 this.currentPage = this.startPage;
                 this.clicks = 0;
                 this.startTime = Date.now();
@@ -444,13 +484,8 @@
             }
         }
 
-        async startVSMode() {
-            this.showLoading("Creating VS challenge...");
+        async startVSModeWithCurrentPages() {
             try {
-                // If user didn't touch start/target, ensure they exist
-                if (!this.startPage) this.startPage = await this.getRandomPage();
-                if (!this.targetPage) this.targetPage = await this.getRandomPage();
-
                 const start = this.startPage;
                 const target = this.targetPage;
 
@@ -541,21 +576,19 @@
         }
 
         async findPageForBand(band) {
-            // Try up to N random pages to hit band
-            for (let i = 0; i < 10; i++) {
+            // Try up to N random pages to approximate band using pageviews only
+            for (let i = 0; i < 12; i++) {
                 const candidate = await this.getRandomPage();
                 const views = await this.fetchPageviews(candidate);
                 if (views == null) continue;
 
-                // approximate difficulty from views only (fast check)
                 const P = Math.log10(views + 1);
                 const Pn = clamp01((P - 0) / (6 - 0));
                 const Dp = 1 - Pn;
-                const scoreApprox = 100 * (0.6 * Dp + 0.4 * 0.5); // assume medium links
+                const scoreApprox = 100 * (0.8 * Dp + 0.2 * 0.5); // assume medium links
                 const bandApprox = bandForScore(scoreApprox);
                 if (bandApprox === band) return candidate;
             }
-            // fallback
             return null;
         }
 
@@ -639,9 +672,10 @@
             const Lcap = 300;
             const Ln = Lcap > 0 ? Math.min(L, Lcap) / Lcap : 0;
 
+            // Heavier weight on pageviews: 80% popularity, 20% links
             const Dp = 1 - Pn;
             const Dl = 1 - Ln;
-            const score = 100 * (0.6 * Dp + 0.4 * Dl);
+            const score = 100 * (0.8 * Dp + 0.2 * Dl);
             this.difficultyScore = Math.round(score);
             this.difficultyName = difficultyLabel(this.difficultyScore);
         }
