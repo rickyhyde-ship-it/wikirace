@@ -292,6 +292,66 @@
 
         .journey-list li { margin-bottom: 4px; font-size: 14px; }
 
+        /* Preview modal */
+        .preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 14px;
+        }
+
+        .preview-modal {
+            background: white;
+            width: min(900px, 95vw);
+            height: min(80vh, 850px);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+        }
+
+        .preview-header {
+            background: #1f3270;
+            color: white;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .preview-title {
+            font-weight: 700;
+            font-size: 14px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .preview-close {
+            background: white;
+            color: #1f3270;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .preview-body {
+            padding: 12px;
+            overflow: auto;
+        }
+
+        .preview-body a { pointer-events: none; }
+        .preview-body table { max-width: 100% !important; display: block; overflow-x: auto; }
+        .preview-body img { max-width: 100% !important; height: auto !important; }
+
         @media (max-width: 700px) {
             .stats { font-size: 12px; gap: 12px; }
             .stat-value { font-size: 16px; }
@@ -342,7 +402,6 @@
         return t.replace(/_/g, " ").trim().toLowerCase();
     }
 
-    // Pick a random month between 2016-01 and 2025-12 inclusive
     function randomYearMonth() {
         const startYear = 2016;
         const startMonth = 1;
@@ -359,20 +418,17 @@
         return { year: "" + year, month: monthStr };
     }
 
-    // Get a random "easy" article from the top mobile-web pageviews API
     async function getRandomTopArticle() {
         const ym = randomYearMonth();
         const url = TOP_BASE + "/" + ym.year + "/" + ym.month + "/all-days";
         try {
             const res = await fetch(url);
-            if (!res.ok) {
-                return null;
-            }
+            if (!res.ok) return null;
+
             const data = await res.json();
             if (!data.items || !data.items.length) return null;
-            const articles = data.items[0].articles || [];
 
-            // Filter out obvious junk entries
+            const articles = data.items[0].articles || [];
             const filtered = articles.filter(a => {
                 if (!a.article) return false;
                 const name = a.article;
@@ -380,6 +436,7 @@
                 if (name.indexOf("Special:") === 0) return false;
                 return true;
             });
+
             if (!filtered.length) return null;
 
             const idx = Math.floor(Math.random() * filtered.length);
@@ -406,7 +463,8 @@
             this.backLimit = 0;
             this.backUsesLeft = 0;
             this.pendingNavigation = false;
-            this.freeClickNext = false;
+
+            this.freeClickNext = false; // redirect free-pass
 
             this.history = [];
             this.historyStack = [];
@@ -418,9 +476,7 @@
             if (amount <= 0) return;
             this.clicks += amount;
             const clicksEl = document.getElementById("clicks-value");
-            if (clicksEl) {
-                clicksEl.textContent = this.clicks.toString();
-            }
+            if (clicksEl) clicksEl.textContent = this.clicks.toString();
         }
 
         init() {
@@ -589,7 +645,6 @@
             if (this.difficultyMode === "easy") {
                 const top = await getRandomTopArticle();
                 if (top) return top;
-                // fall back if top API fails
             }
             return await this.getRandomPage();
         }
@@ -601,12 +656,8 @@
             const userStart = startInput.value.trim();
             const userTarget = targetInput.value.trim();
 
-            if (userStart.length > 0) {
-                this.startPage = userStart;
-            }
-            if (userTarget.length > 0) {
-                this.targetPage = userTarget;
-            }
+            if (userStart.length > 0) this.startPage = userStart;
+            if (userTarget.length > 0) this.targetPage = userTarget;
 
             this.showLoading("Setting up...");
 
@@ -623,12 +674,10 @@
             this.backUsesLeft = this.backLimit;
             this.history = [];
             this.historyStack = [];
+            this.freeClickNext = false;
 
-            if (isVSMode) {
-                return this.startVSModeWithCurrentPages();
-            } else {
-                return this.startNewGameWithCurrentPages();
-            }
+            if (isVSMode) return this.startVSModeWithCurrentPages();
+            return this.startNewGameWithCurrentPages();
         }
 
         async startNewGameWithCurrentPages() {
@@ -640,7 +689,7 @@
 
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-                this.freeClickNext = false;
+
                 this.history = [this.startPage];
                 this.historyStack = [];
 
@@ -663,9 +712,7 @@
                 document.getElementById("app").innerHTML =
                     '<div class="menu">' +
                         '<h1>VS Challenge</h1>' +
-                        '<p><strong>Mode:</strong> ' +
-                        (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") +
-                        '</p>' +
+                        '<p><strong>Mode:</strong> ' + (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") + '</p>' +
                         '<p><strong>Start:</strong> ' + start + '</p>' +
                         '<p><strong>Target:</strong> ' + target + '</p>' +
                         '<div class="share-input">' + shareUrl + '</div>' +
@@ -690,10 +737,11 @@
 
                 this.currentLinkCount = 0;
                 this.currentWordCount = 0;
-                this.freeClickNext = false;
+
                 this.backUsesLeft = this.backLimit;
                 this.history = [this.startPage];
                 this.historyStack = [];
+                this.freeClickNext = false;
 
                 this.startTimer();
                 await this.loadPage(this.startPage);
@@ -704,6 +752,31 @@
 
         playChallengeNow(start, target) {
             this.startChallengeMode(start, target);
+        }
+
+        isRedirectHtml(html) {
+            if (!html) return false;
+            // Common patterns that show on redirect pages in the rendered output
+            return (
+                html.indexOf("This page is a redirect") !== -1 ||
+                html.indexOf("Redirect to:") !== -1
+            );
+        }
+
+        fixWikiImageSrcs(rootEl) {
+            if (!rootEl) return;
+            const imgs = rootEl.querySelectorAll("img");
+            for (let i = 0; i < imgs.length; i++) {
+                const el = imgs[i];
+                let src = el.getAttribute("src");
+                if (!src) continue;
+
+                if (src.indexOf("//") === 0) {
+                    el.src = "https:" + src;
+                } else if (src.indexOf("/") === 0 && src.indexOf("//") !== 0) {
+                    el.src = "https://en.wikipedia.org" + src;
+                }
+            }
         }
 
         async loadPage(title) {
@@ -717,18 +790,17 @@
                         "&prop=text&disableeditsection=1&disabletoc=1&origin=*"
                 );
                 const data = await response.json();
-
-                if (data.error) {
-                    throw new Error(data.error.info);
-                }
+                if (data.error) throw new Error(data.error.info);
 
                 const apiTitle = data.parse && data.parse.title ? data.parse.title : title;
                 this.currentPage = apiTitle;
 
-                const html = data.parse.text["*"] || "";
+                const html = (data.parse && data.parse.text && data.parse.text["*"]) ? data.parse.text["*"] : "";
                 this.render(html);
 
                 const container = document.querySelector(".wiki-content");
+                this.fixWikiImageSrcs(container);
+
                 let validLinks = 0;
                 let words = 0;
 
@@ -736,9 +808,7 @@
                     const links = container.querySelectorAll("a");
                     for (let i = 0; i < links.length; i++) {
                         const href = links[i].getAttribute("href");
-                        if (href && href.indexOf("/wiki/") === 0 && href.indexOf(":") === -1) {
-                            validLinks++;
-                        }
+                        if (href && href.indexOf("/wiki/") === 0 && href.indexOf(":") === -1) validLinks++;
                     }
                     const text = container.textContent || "";
                     words = text.trim().split(/\s+/).filter(Boolean).length;
@@ -746,6 +816,10 @@
 
                 this.currentLinkCount = validLinks;
                 this.currentWordCount = words;
+
+                // If this loaded page is a redirect page, make the NEXT click free
+                this.freeClickNext = this.isRedirectHtml(html);
+
                 this.updateHeaderStats();
 
                 if (normalizeTitle(apiTitle) === normalizeTitle(this.targetPage)) {
@@ -758,37 +832,78 @@
             }
         }
 
+        async showTargetPreview() {
+            if (!this.targetPage) return;
+
+            const existing = document.getElementById("preview-overlay");
+            if (existing) existing.remove();
+
+            const overlay = document.createElement("div");
+            overlay.id = "preview-overlay";
+            overlay.className = "preview-overlay";
+
+            overlay.innerHTML =
+                '<div class="preview-modal" role="dialog" aria-modal="true">' +
+                    '<div class="preview-header">' +
+                        '<div class="preview-title">Target preview: ' + this.targetPage + '</div>' +
+                        '<button class="preview-close" id="preview-close-btn">Close</button>' +
+                    '</div>' +
+                    '<div class="preview-body" id="preview-body">Loading preview...</div>' +
+                '</div>';
+
+            document.body.appendChild(overlay);
+
+            const close = () => overlay.remove();
+            overlay.addEventListener("click", (e) => {
+                if (e.target === overlay) close();
+            });
+            document.getElementById("preview-close-btn").addEventListener("click", close);
+
+            try {
+                const res = await fetch(
+                    API_BASE +
+                        "?action=parse&format=json&page=" +
+                        encodeURIComponent(this.targetPage) +
+                        "&prop=text&disableeditsection=1&disabletoc=1&origin=*"
+                );
+                const data = await res.json();
+                if (data.error) throw new Error(data.error.info);
+
+                const html = (data.parse && data.parse.text && data.parse.text["*"]) ? data.parse.text["*"] : "";
+                const body = document.getElementById("preview-body");
+                body.innerHTML = html;
+
+                this.fixWikiImageSrcs(body);
+            } catch (e) {
+                const body = document.getElementById("preview-body");
+                body.innerHTML = '<div class="error">Failed to load preview.</div>';
+            }
+        }
+
         updateHeaderStats() {
             const diffEl = document.getElementById("difficulty-value");
             const linksEl = document.getElementById("links-value");
             const backEl = document.getElementById("back-uses-value");
 
             if (diffEl) {
-                diffEl.textContent =
-                    (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
+                const modeText = (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
+                diffEl.textContent = this.freeClickNext ? (modeText + " (Next click free)") : modeText;
             }
 
-            if (linksEl) {
-                linksEl.textContent = this.currentLinkCount.toString();
-            }
-
-            if (backEl) {
-                backEl.textContent = this.backUsesLeft.toString();
-            }
+            if (linksEl) linksEl.textContent = this.currentLinkCount.toString();
+            if (backEl) backEl.textContent = this.backUsesLeft.toString();
         }
 
         render(htmlContent) {
-            const diffText =
-                (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
+            const modeText = (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode");
+            const modeUi = this.freeClickNext ? (modeText + " (Next click free)") : modeText;
 
             document.getElementById("app").innerHTML =
                 '<div class="header">' +
                     '<div class="stats">' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Clicks</span>' +
-                            '<span class="stat-value" id="clicks-value">' +
-                            this.clicks +
-                            '</span>' +
+                            '<span class="stat-value" id="clicks-value">' + this.clicks + '</span>' +
                         '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Time</span>' +
@@ -796,33 +911,26 @@
                         '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Mode</span>' +
-                            '<span class="stat-value" id="difficulty-value" style="font-size:14px;">' +
-                            diffText +
-                            '</span>' +
+                            '<span class="stat-value" id="difficulty-value" style="font-size:14px;">' + modeUi + '</span>' +
                         '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Links</span>' +
-                            '<span class="stat-value" id="links-value">' +
-                            this.currentLinkCount +
-                            '</span>' +
+                            '<span class="stat-value" id="links-value">' + this.currentLinkCount + '</span>' +
                         '</div>' +
                         '<div class="stat-item">' +
                             '<span class="stat-label">Back left</span>' +
-                            '<span class="stat-value" id="back-uses-value">' +
-                            this.backUsesLeft +
-                            '</span>' +
+                            '<span class="stat-value" id="back-uses-value">' + this.backUsesLeft + '</span>' +
                         '</div>' +
                     '</div>' +
-                    '<div style="display:flex;gap:8px;align-items:center;">' +
+                    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">' +
+                        '<button class="secondary-btn" id="preview-btn">Preview Target</button>' +
                         '<button class="secondary-btn" id="back-btn">Back (-2)</button>' +
                         '<button class="secondary-btn" onclick="game.showMenu()">Menu</button>' +
                     '</div>' +
                 '</div>' +
                 '<div class="target-bar">' +
                     '<div class="target-row">' +
-                        '<div>Current:<span class="target-title">' +
-                        this.currentPage +
-                        '</span></div>' +
+                        '<div>Current:<span class="target-title">' + this.currentPage + '</span></div>' +
                     '</div>' +
                     '<div class="target-row">' +
                         '<div>Start:<span class="target-title">' + this.startPage + '</span></div>' +
@@ -832,13 +940,17 @@
                     '</div>' +
                 '</div>' +
                 '<div class="content">' +
-                    '<div class="wiki-content">' +
-                    htmlContent +
-                    '</div>' +
+                    '<div class="wiki-content">' + htmlContent + '</div>' +
                 '</div>';
 
             this.attachLinkHandlers();
             this.attachBackHandler();
+
+            const previewBtn = document.getElementById("preview-btn");
+            if (previewBtn) {
+                previewBtn.addEventListener("click", () => this.showTargetPreview());
+            }
+
             this.updateHeaderStats();
         }
 
@@ -849,27 +961,14 @@
             for (let i = 0; i < links.length; i++) {
                 (function (link) {
                     const href = link.getAttribute("href");
-                    if (
-                        href &&
-                        href.indexOf("/wiki/") === 0 &&
-                        href.indexOf(":") === -1
-                    ) {
+                    if (href && href.indexOf("/wiki/") === 0 && href.indexOf(":") === -1) {
                         link.addEventListener("click", function (e) {
                             e.preventDefault();
                             if (gameRef.pendingNavigation) return;
 
-                            const title = decodeURIComponent(
-                                href.replace("/wiki/", "")
-                            );
+                            const title = decodeURIComponent(href.replace("/wiki/", ""));
 
-                            const wikiContent = document.querySelector(".wiki-content");
-                            const isRedirectPage = wikiContent &&
-                                wikiContent.innerHTML.indexOf("This page is a redirect") !== -1;
-
-                            if (isRedirectPage) {
-                                gameRef.freeClickNext = true;
-                            }
-
+                            // Redirect rule: if current page is a redirect page, next click is free
                             if (gameRef.freeClickNext) {
                                 gameRef.freeClickNext = false;
                             } else {
@@ -895,8 +994,7 @@
             if (!backBtn) return;
 
             function updateState() {
-                backBtn.disabled =
-                    !gameRef.historyStack.length || gameRef.backUsesLeft <= 0;
+                backBtn.disabled = !gameRef.historyStack.length || gameRef.backUsesLeft <= 0;
             }
 
             updateState();
@@ -919,24 +1017,14 @@
 
         startTimer() {
             const gameRef = this;
-            if (this.timerInterval) {
-                clearInterval(this.timerInterval);
-            }
+            if (this.timerInterval) clearInterval(this.timerInterval);
 
             this.timerInterval = setInterval(function () {
-                const elapsed = Math.floor(
-                    (Date.now() - gameRef.startTime) / 1000
-                );
+                const elapsed = Math.floor((Date.now() - gameRef.startTime) / 1000);
                 const minutes = Math.floor(elapsed / 60);
                 const seconds = elapsed % 60;
                 const timerEl = document.getElementById("timer");
-                if (timerEl) {
-                    timerEl.textContent =
-                        minutes +
-                        ":" +
-                        (seconds < 10 ? "0" : "") +
-                        seconds;
-                }
+                if (timerEl) timerEl.textContent = minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
             }, 1000);
         }
 
@@ -944,37 +1032,26 @@
             this.gameActive = false;
             if (this.timerInterval) clearInterval(this.timerInterval);
 
-            const elapsed = Math.floor(
-                (Date.now() - this.startTime) / 1000
-            );
+            const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
             const minutes = Math.floor(elapsed / 60);
             const seconds = elapsed % 60;
 
-            const finalTime =
-                minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+            const finalTime = minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
             const totalClicks = this.clicks;
 
-            const journeyItems = this.history
-                .map(function (t) {
-                    return "<li>" + t + "</li>";
-                })
-                .join("");
+            const journeyItems = this.history.map(t => "<li>" + t + "</li>").join("");
 
             document.getElementById("app").innerHTML =
                 '<div class="menu">' +
                     '<h1>Game complete</h1>' +
                     '<div class="victory">' +
-                        '<p><strong>Mode:</strong> ' +
-                        (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") +
-                        '</p>' +
+                        '<p><strong>Mode:</strong> ' + (this.difficultyMode === "easy" ? "Easy Mode" : "Crack Head Mode") + '</p>' +
                         '<p><strong>Total clicks:</strong> ' + totalClicks + '</p>' +
                         '<p><strong>Time:</strong> ' + finalTime + '</p>' +
                     '</div>' +
                     '<div class="settings-group">' +
                         '<div class="setting-label">Journey</div>' +
-                        '<ol class="journey-list">' +
-                            journeyItems +
-                        '</ol>' +
+                        '<ol class="journey-list">' + journeyItems + '</ol>' +
                     '</div>' +
                     '<button class="primary-btn" onclick="game.showMenu()">Back to settings</button>' +
                 '</div>';
@@ -988,9 +1065,7 @@
         showError(message) {
             document.getElementById("app").innerHTML =
                 '<div class="menu">' +
-                    '<div class="error">' +
-                    message +
-                    '</div>' +
+                    '<div class="error">' + message + '</div>' +
                     '<button class="primary-btn" onclick="game.showMenu()">Back to settings</button>' +
                 '</div>';
         }
